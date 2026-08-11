@@ -1,0 +1,37 @@
+{
+  "expo": {
+    "name": "OrganizApp",
+    "slug": "organizapp",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "organizapp",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "android": {
+      "package": "com.seunome.organizapp",
+      "edgeToEdgeEnabled": true
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.seunome.organizapp"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-notifications",
+        {
+          "color": "#6C5CE7"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "d38fb802-0d74-4355-b037-9805528e4e53"
+      }
+    }
+  }
+}
