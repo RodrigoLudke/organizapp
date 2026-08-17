@@ -5,6 +5,7 @@ export type Section = {
   name: string;
   icon: string;
   color: string;
+  parent_id: number | null;
   created_at: number;
 };
 
@@ -12,6 +13,7 @@ export type NewSection = {
   name: string;
   icon: string;
   color: string;
+  parent_id?: number | null;
 };
 
 export type Item = {
@@ -51,9 +53,9 @@ export async function initDatabase(): Promise<void> {
   const versionRow = await db.getFirstAsync<{ user_version: number }>(
     "PRAGMA user_version"
   );
-  const version = versionRow?.user_version ?? 0;
+  let currentVersion = versionRow?.user_version ?? 0;
 
-  if (version === 0) {
+  if (currentVersion === 0) {
     const hasItems = await db.getFirstAsync<{ count: number }>(
       `SELECT COUNT(*) as count FROM sqlite_master WHERE type='table' AND name='items'`
     );
@@ -66,6 +68,7 @@ export async function initDatabase(): Promise<void> {
           name TEXT NOT NULL,
           icon TEXT NOT NULL DEFAULT '📁',
           color TEXT NOT NULL DEFAULT '#6C5CE7',
+          parent_id INTEGER,
           created_at INTEGER NOT NULL
         );
         CREATE TABLE items (
@@ -147,6 +150,17 @@ export async function initDatabase(): Promise<void> {
     }
 
     await db.execAsync(`PRAGMA user_version = 1;`);
+    currentVersion = 1;
+  }
+
+  if (currentVersion < 2) {
+    // v1→v2: seções aninhadas (parent_id)
+    try {
+      await db.execAsync(`ALTER TABLE sections ADD COLUMN parent_id INTEGER`);
+    } catch (_) {
+      // Coluna já existe — ignora
+    }
+    await db.execAsync(`PRAGMA user_version = 2;`);
   }
 }
 
@@ -163,14 +177,22 @@ export async function createSection(section: NewSection): Promise<number> {
   const db = await getDb();
   const now = Date.now();
   const result = await db.runAsync(
-    `INSERT INTO sections (name, icon, color, created_at) VALUES (?, ?, ?, ?)`,
-    [section.name, section.icon, section.color, now]
+    `INSERT INTO sections (name, icon, color, parent_id, created_at) VALUES (?, ?, ?, ?, ?)`,
+    [section.name, section.icon, section.color, section.parent_id ?? null, now]
   );
   return result.lastInsertRowId;
 }
 
 export async function deleteSection(id: number): Promise<void> {
   const db = await getDb();
+  // Deleta sub-seções recursivamente primeiro
+  const subSections = await db.getAllAsync<{ id: number }>(
+    `SELECT id FROM sections WHERE parent_id = ?`,
+    [id]
+  );
+  for (const sub of subSections) {
+    await deleteSection(sub.id);
+  }
   // Cancela notificações dos itens antes de deletar
   const sectionItems = await db.getAllAsync<{ notification_id: string | null }>(
     `SELECT notification_id FROM items WHERE section_id = ?`,
@@ -194,7 +216,16 @@ export async function countItemsInSection(id: number): Promise<number> {
     `SELECT COUNT(*) as count FROM items WHERE section_id = ?`,
     [id]
   );
-  return row?.count ?? 0;
+  let count = row?.count ?? 0;
+  // Soma itens das sub-seções recursivamente
+  const subSections = await db.getAllAsync<{ id: number }>(
+    `SELECT id FROM sections WHERE parent_id = ?`,
+    [id]
+  );
+  for (const sub of subSections) {
+    count += await countItemsInSection(sub.id);
+  }
+  return count;
 }
 
 // ─── Itens ───────────────────────────────────────────────────────────────────

@@ -22,8 +22,9 @@ import {
   type Item,
   type Section,
 } from "@/db/database";
-import { colors, SECTION_COLORS, SECTION_ICONS } from "@/theme";
+import { colors } from "@/theme";
 import ItemCard from "@/components/ItemCard";
+import ColorPicker from "react-native-wheel-color-picker";
 
 type DoneFilter = "all" | "pending" | "done";
 
@@ -36,40 +37,53 @@ const DONE_FILTERS: { key: DoneFilter; label: string }[] = [
 export default function Home() {
   const insets = useSafeAreaInsets();
   const [items, setItems] = useState<Item[]>([]);
-  const [sections, setSections] = useState<Section[]>([]);
-  const [selectedSection, setSelectedSection] = useState<number | null>(null);
+  const [allSections, setAllSections] = useState<Section[]>([]);
+  // Pilha de navegação: seções em que o usuário entrou (drill-down)
+  const [sectionPath, setSectionPath] = useState<Section[]>([]);
   const [doneFilter, setDoneFilter] = useState<DoneFilter>("all");
   const [search, setSearch] = useState("");
 
   // Modal de nova seção
   const [showNewSection, setShowNewSection] = useState(false);
   const [newName, setNewName] = useState("");
-  const [newIcon, setNewIcon] = useState(SECTION_ICONS[0]);
-  const [newColorIdx, setNewColorIdx] = useState(0);
+  const [newColor, setNewColor] = useState(colors.primary);
 
+  // Modal de seleção de seção
+  const [showSectionPicker, setShowSectionPicker] = useState(false);
+
+  // Seção atual (última da pilha) e id pai para listar sub-seções
+  const currentSection = sectionPath.at(-1) ?? null;
+  const currentParentId = currentSection?.id ?? null;
+
+  // Mapa completo para lookup em ItemCard
   const sectionMap = useMemo(
-    () => new Map(sections.map((s) => [s.id, s])),
-    [sections]
+    () => new Map(allSections.map((s) => [s.id, s])),
+    [allSections]
+  );
+
+  // Seções visíveis como chips (filhas do nível atual)
+  const visibleSections = useMemo(
+    () => allSections.filter((s) => s.parent_id === currentParentId),
+    [allSections, currentParentId]
   );
 
   const loadSections = useCallback(async () => {
-    setSections(await listSections());
+    setAllSections(await listSections());
   }, []);
 
   const loadItems = useCallback(async () => {
     const doneParam =
       doneFilter === "all" ? null : doneFilter === "done" ? true : false;
-    setItems(await listItems(selectedSection, doneParam, search));
-  }, [selectedSection, doneFilter, search]);
+    // Mostra itens da seção atual (null = todos os itens, na raiz)
+    setItems(await listItems(currentSection?.id ?? null, doneParam, search));
+  }, [currentSection, doneFilter, search]);
 
-  // Recarrega seções ao ganhar foco (volta da tela de edição)
   useFocusEffect(
     useCallback(() => {
       loadSections();
     }, [loadSections])
   );
 
-  // Recarrega itens quando filtros mudam ou tela ganha foco
   useEffect(() => {
     loadItems();
   }, [loadItems]);
@@ -77,6 +91,16 @@ export default function Home() {
   const handleToggle = async (item: Item) => {
     await toggleDone(item.id, item.done === 0);
     loadItems();
+  };
+
+  // Navega para dentro de uma seção (drill-down)
+  const enterSection = (section: Section) => {
+    setSectionPath((prev) => [...prev, section]);
+  };
+
+  // Navega para um nível específico do breadcrumb (-1 = raiz)
+  const navigateToLevel = (level: number) => {
+    setSectionPath((prev) => (level < 0 ? [] : prev.slice(0, level + 1)));
   };
 
   const handleCreateSection = async () => {
@@ -87,12 +111,12 @@ export default function Home() {
     }
     await createSection({
       name,
-      icon: newIcon,
-      color: SECTION_COLORS[newColorIdx],
+      icon: "",
+      color: newColor,
+      parent_id: currentParentId,
     });
     setNewName("");
-    setNewIcon(SECTION_ICONS[0]);
-    setNewColorIdx(0);
+    setNewColor(colors.primary);
     setShowNewSection(false);
     await loadSections();
   };
@@ -111,7 +135,10 @@ export default function Home() {
           style: "destructive",
           onPress: async () => {
             await deleteSection(section.id);
-            if (selectedSection === section.id) setSelectedSection(null);
+            // Se estava dentro da seção deletada, volta para a raiz
+            if (sectionPath.some((s) => s.id === section.id)) {
+              setSectionPath([]);
+            }
             await loadSections();
           },
         },
@@ -125,8 +152,11 @@ export default function Home() {
       name: "?",
       icon: "📁",
       color: colors.primary,
+      parent_id: null,
       created_at: 0,
     };
+
+  const isAtRoot = sectionPath.length === 0;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 8 }]}>
@@ -140,50 +170,52 @@ export default function Home() {
         returnKeyType="search"
       />
 
-      {/* Chips de seção */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.sectionScroll}
-        contentContainerStyle={styles.sectionScrollContent}
-      >
-        <Pressable
-          onPress={() => setSelectedSection(null)}
-          style={[styles.chip, selectedSection === null && styles.chipActive]}
+      {/* Breadcrumb (mostrado quando dentro de alguma seção) */}
+      {!isAtRoot && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.breadcrumbScroll}
+          contentContainerStyle={styles.breadcrumbContent}
         >
-          <Text
-            style={[
-              styles.chipText,
-              selectedSection === null && styles.chipTextActive,
-            ]}
-          >
-            Tudo
-          </Text>
-        </Pressable>
-
-        {sections.map((s) => (
-          <Pressable
-            key={s.id}
-            onPress={() => setSelectedSection(s.id)}
-            onLongPress={() => handleLongPressSection(s)}
-            style={[
-              styles.chip,
-              selectedSection === s.id && {
-                backgroundColor: s.color,
-                borderColor: s.color,
-              },
-            ]}
-          >
-            <Text
-              style={[
-                styles.chipText,
-                selectedSection === s.id && styles.chipTextActive,
-              ]}
-            >
-              {s.icon} {s.name}
-            </Text>
+          <Pressable onPress={() => navigateToLevel(-1)}>
+            <Text style={styles.breadcrumbItem}>Tudo</Text>
           </Pressable>
-        ))}
+          {sectionPath.map((s, idx) => (
+            <View key={s.id} style={styles.breadcrumbStep}>
+              <Text style={styles.breadcrumbSep}> › </Text>
+              <Pressable onPress={() => navigateToLevel(idx)}>
+                <Text
+                  style={[
+                    styles.breadcrumbItem,
+                    idx === sectionPath.length - 1 &&
+                      styles.breadcrumbItemCurrent,
+                  ]}
+                >
+                  {s.icon} {s.name}
+                </Text>
+              </Pressable>
+            </View>
+          ))}
+        </ScrollView>
+      )}
+
+      {/* Seletor de seção compacto */}
+      <View style={styles.sectionRow}>
+        <Pressable
+          onPress={() => setShowSectionPicker(true)}
+          style={[
+            styles.sectionPickerBtn,
+            currentSection && { borderColor: currentSection.color },
+          ]}
+        >
+          <Text style={styles.sectionPickerText}>
+            {currentSection
+              ? `${currentSection.icon} ${currentSection.name}`
+              : "Todas"}
+          </Text>
+          <Text style={styles.sectionPickerArrow}>▾</Text>
+        </Pressable>
 
         <Pressable
           onPress={() => setShowNewSection(true)}
@@ -191,7 +223,7 @@ export default function Home() {
         >
           <Text style={styles.chipAddText}>+ Seção</Text>
         </Pressable>
-      </ScrollView>
+      </View>
 
       {/* Filtro concluído/pendente */}
       <View style={styles.doneFilterRow}>
@@ -238,8 +270,12 @@ export default function Home() {
           <View style={styles.empty}>
             <Text style={styles.emptyIcon}>🗂️</Text>
             <Text style={styles.emptyText}>
-              {sections.length === 0
+              {allSections.length === 0
                 ? "Crie uma seção para começar."
+                : isAtRoot
+                ? "Nada por aqui ainda.\nToque no + para adicionar."
+                : visibleSections.length > 0
+                ? "Nenhum item nesta seção.\nEntre em uma sub-seção ou toque no +."
                 : "Nada por aqui ainda.\nToque no + para adicionar."}
             </Text>
           </View>
@@ -250,20 +286,97 @@ export default function Home() {
       <Pressable
         style={[styles.fab, { bottom: insets.bottom + 24 }]}
         onPress={() => {
-          if (sections.length === 0) {
-            Alert.alert("Crie uma seção primeiro", "Toque em '+ Seção' para criar sua primeira seção.");
+          if (allSections.length === 0) {
+            Alert.alert(
+              "Crie uma seção primeiro",
+              "Toque em '+ Seção' para criar sua primeira seção."
+            );
             return;
           }
           router.push({
             pathname: "/edit",
-            params: selectedSection
-              ? { section_id: String(selectedSection) }
+            params: currentSection
+              ? { section_id: String(currentSection.id) }
               : {},
           });
         }}
       >
         <Text style={styles.fabText}>+</Text>
       </Pressable>
+
+      {/* Modal: Seletor de Seção */}
+      <Modal
+        visible={showSectionPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowSectionPicker(false)}
+      >
+        <Pressable
+          style={styles.overlay}
+          onPress={() => setShowSectionPicker(false)}
+        >
+          <Pressable
+            style={[styles.modalBox, { paddingBottom: insets.bottom + 20 }]}
+            onPress={() => {}}
+          >
+            <Text style={styles.modalTitle}>Seções</Text>
+
+            {/* Opção "Todas" */}
+            <Pressable
+              style={[
+                styles.sectionPickerItem,
+                isAtRoot && styles.sectionPickerItemActive,
+              ]}
+              onPress={() => {
+                setSectionPath([]);
+                setShowSectionPicker(false);
+              }}
+            >
+              <View
+                style={[styles.sectionPickerDot, { backgroundColor: colors.primary }]}
+              />
+              <Text style={styles.sectionPickerItemText}>Todas</Text>
+              {isAtRoot && (
+                <Text style={styles.sectionPickerCheck}>✓</Text>
+              )}
+            </Pressable>
+
+            {allSections
+              .filter((s) => s.parent_id === null)
+              .map((s) => (
+                <Pressable
+                  key={s.id}
+                  style={[
+                    styles.sectionPickerItem,
+                    currentSection?.id === s.id &&
+                      styles.sectionPickerItemActive,
+                  ]}
+                  onPress={() => {
+                    setSectionPath([s]);
+                    setShowSectionPicker(false);
+                  }}
+                  onLongPress={() => {
+                    setShowSectionPicker(false);
+                    handleLongPressSection(s);
+                  }}
+                >
+                  <View
+                    style={[
+                      styles.sectionPickerDot,
+                      { backgroundColor: s.color },
+                    ]}
+                  />
+                  <Text style={styles.sectionPickerItemText}>
+                    {s.icon} {s.name}
+                  </Text>
+                  {currentSection?.id === s.id && (
+                    <Text style={styles.sectionPickerCheck}>✓</Text>
+                  )}
+                </Pressable>
+              ))}
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Modal: Nova Seção */}
       <Modal
@@ -273,58 +386,41 @@ export default function Home() {
         onRequestClose={() => setShowNewSection(false)}
       >
         <View style={styles.overlay}>
-          <View style={[styles.modalBox, { paddingBottom: insets.bottom + 20 }]}>
-            <Text style={styles.modalTitle}>Nova Seção</Text>
+          <View
+            style={[styles.modalBox, { paddingBottom: insets.bottom + 20 }]}
+          >
+            <Text style={styles.modalTitle}>
+              {currentSection
+                ? `Sub-seção em ${currentSection.icon} ${currentSection.name}`
+                : "Nova Seção"}
+            </Text>
 
             <TextInput
               style={styles.modalInput}
-              placeholder="Nome da seção"
+              placeholder="Nome da seção  (pode incluir emoji 📁)"
               placeholderTextColor={colors.textDim}
               value={newName}
               onChangeText={setNewName}
               autoFocus
             />
 
-            <Text style={styles.modalLabel}>Ícone</Text>
-            <View style={styles.iconGrid}>
-              {SECTION_ICONS.map((icon) => (
-                <Pressable
-                  key={icon}
-                  onPress={() => setNewIcon(icon)}
-                  style={[
-                    styles.iconBtn,
-                    newIcon === icon && styles.iconBtnActive,
-                  ]}
-                >
-                  <Text style={styles.iconBtnText}>{icon}</Text>
-                </Pressable>
-              ))}
-            </View>
-
             <Text style={styles.modalLabel}>Cor</Text>
-            <View style={styles.colorRow}>
-              {SECTION_COLORS.map((c, idx) => (
-                <Pressable
-                  key={c}
-                  onPress={() => setNewColorIdx(idx)}
-                  style={[
-                    styles.colorDot,
-                    { backgroundColor: c },
-                    newColorIdx === idx && styles.colorDotSelected,
-                  ]}
-                />
-              ))}
+            <View style={styles.colorPickerWrap}>
+              <ColorPicker
+                color={newColor}
+                onColorChange={setNewColor}
+                thumbSize={24}
+                sliderSize={24}
+                noSnap
+                row={false}
+                swatches={false}
+              />
             </View>
 
             {/* Preview */}
-            <View
-              style={[
-                styles.previewChip,
-                { backgroundColor: SECTION_COLORS[newColorIdx] },
-              ]}
-            >
+            <View style={[styles.previewChip, { backgroundColor: newColor }]}>
               <Text style={styles.previewText}>
-                {newIcon} {newName || "Nome da seção"}
+                {newName || "Nome da seção"}
               </Text>
             </View>
 
@@ -361,25 +457,52 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
 
-  sectionScroll: { marginTop: 12, flexGrow: 0 },
-  sectionScrollContent: {
+  breadcrumbScroll: { marginTop: 10, flexGrow: 0 },
+  breadcrumbContent: {
     paddingHorizontal: 16,
-    gap: 8,
     flexDirection: "row",
     alignItems: "center",
   },
+  breadcrumbStep: { flexDirection: "row", alignItems: "center" },
+  breadcrumbSep: { color: colors.textDim, fontSize: 13 },
+  breadcrumbItem: { color: colors.primary, fontSize: 13, fontWeight: "600" },
+  breadcrumbItemCurrent: { color: colors.text },
 
-  chip: {
+  sectionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 16,
+    marginTop: 10,
+  },
+  sectionPickerBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 14,
-    paddingVertical: 7,
+    paddingVertical: 9,
     borderRadius: 20,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  chipText: { color: colors.textDim, fontSize: 13, fontWeight: "600" },
-  chipTextActive: { color: "#fff" },
+  sectionPickerText: { color: colors.text, fontSize: 14, fontWeight: "600" },
+  sectionPickerArrow: { color: colors.textDim, fontSize: 12, marginLeft: 6 },
+
+  // itens dentro do modal de seleção
+  sectionPickerItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    gap: 12,
+  },
+  sectionPickerItemActive: { opacity: 1 },
+  sectionPickerDot: { width: 12, height: 12, borderRadius: 6 },
+  sectionPickerItemText: { flex: 1, color: colors.text, fontSize: 15, fontWeight: "500" },
+  sectionPickerCheck: { color: colors.primary, fontSize: 16, fontWeight: "700" },
 
   chipAdd: {
     paddingHorizontal: 14,
@@ -405,7 +528,7 @@ const styles = StyleSheet.create({
   },
   doneChipActive: { backgroundColor: colors.primarySoft },
   doneChipText: { color: colors.textDim, fontSize: 12, fontWeight: "600" },
-  doneChipTextActive: { color: "#fff" },
+  doneChipTextActive: { color: "#FFFFFF" },
 
   empty: { alignItems: "center", marginTop: 80, gap: 12 },
   emptyIcon: { fontSize: 48 },
@@ -464,38 +587,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginBottom: 10,
   },
-  iconGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
+  colorPickerWrap: {
+    height: 220,
     marginBottom: 16,
   },
-  iconBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    backgroundColor: colors.surfaceAlt,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 2,
-    borderColor: "transparent",
-  },
-  iconBtnActive: { borderColor: colors.primary },
-  iconBtnText: { fontSize: 22 },
-  colorRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-    marginBottom: 16,
-  },
-  colorDot: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    borderWidth: 3,
-    borderColor: "transparent",
-  },
-  colorDotSelected: { borderColor: "#fff" },
   previewChip: {
     alignSelf: "flex-start",
     paddingHorizontal: 14,
