@@ -161,6 +161,33 @@ export async function initDatabase(): Promise<void> {
       // Coluna já existe — ignora
     }
     await db.execAsync(`PRAGMA user_version = 2;`);
+    currentVersion = 2;
+  }
+
+  if (currentVersion < 3) {
+    // v2→v3: integração Pluggy (bancos conectados + transações)
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS pluggy_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id TEXT NOT NULL UNIQUE,
+        bank_name TEXT NOT NULL DEFAULT '',
+        last_sync INTEGER
+      );
+      CREATE TABLE IF NOT EXISTS transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        pluggy_id TEXT NOT NULL UNIQUE,
+        account_id TEXT NOT NULL,
+        account_name TEXT NOT NULL DEFAULT '',
+        description TEXT NOT NULL,
+        amount REAL NOT NULL,
+        date TEXT NOT NULL,
+        type TEXT NOT NULL DEFAULT 'DEBIT',
+        category TEXT,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date DESC);
+    `);
+    await db.execAsync(`PRAGMA user_version = 3;`);
   }
 }
 
@@ -324,4 +351,82 @@ export async function toggleDone(id: number, done: boolean): Promise<void> {
 export async function deleteItem(id: number): Promise<void> {
   const db = await getDb();
   await db.runAsync(`DELETE FROM items WHERE id = ?`, [id]);
+}
+
+// ─── Pluggy Items ─────────────────────────────────────────────────────────────
+
+export type PluggyItem = {
+  id: number;
+  item_id: string;
+  bank_name: string;
+  last_sync: number | null;
+};
+
+export async function listPluggyItems(): Promise<PluggyItem[]> {
+  const db = await getDb();
+  return db.getAllAsync<PluggyItem>(`SELECT * FROM pluggy_items ORDER BY id ASC`);
+}
+
+export async function upsertPluggyItem(itemId: string, bankName: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT INTO pluggy_items (item_id, bank_name) VALUES (?, ?)
+     ON CONFLICT(item_id) DO UPDATE SET bank_name = excluded.bank_name`,
+    [itemId, bankName]
+  );
+}
+
+export async function deletePluggyItem(itemId: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(`DELETE FROM pluggy_items WHERE item_id = ?`, [itemId]);
+}
+
+export async function updatePluggyLastSync(itemId: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `UPDATE pluggy_items SET last_sync = ? WHERE item_id = ?`,
+    [Date.now(), itemId]
+  );
+}
+
+// ─── Transactions ─────────────────────────────────────────────────────────────
+
+export type Transaction = {
+  id: number;
+  pluggy_id: string;
+  account_id: string;
+  account_name: string;
+  description: string;
+  amount: number;
+  date: string; // YYYY-MM-DD
+  type: string; // DEBIT | CREDIT
+  category: string | null;
+  created_at: number;
+};
+
+export async function upsertTransactions(
+  txs: Omit<Transaction, "id" | "created_at">[]
+): Promise<void> {
+  const db = await getDb();
+  const now = Date.now();
+  for (const tx of txs) {
+    await db.runAsync(
+      `INSERT INTO transactions (pluggy_id, account_id, account_name, description, amount, date, type, category, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(pluggy_id) DO UPDATE SET
+         description = excluded.description,
+         amount = excluded.amount,
+         type = excluded.type,
+         category = excluded.category`,
+      [tx.pluggy_id, tx.account_id, tx.account_name, tx.description, tx.amount, tx.date, tx.type, tx.category, now]
+    );
+  }
+}
+
+export async function listTransactions(from: string, to: string): Promise<Transaction[]> {
+  const db = await getDb();
+  return db.getAllAsync<Transaction>(
+    `SELECT * FROM transactions WHERE date >= ? AND date <= ? ORDER BY date DESC, id DESC`,
+    [from, to]
+  );
 }

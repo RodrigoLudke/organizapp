@@ -1,15 +1,15 @@
 export const colors = {
-  bg: "#F5F5F5",
-  surface: "#FFFFFF",
-  surfaceAlt: "#EEEEEE",
-  primary: "#1A1A1A",
-  primarySoft: "#3A3A3A",
-  text: "#1A1A1A",
-  textDim: "#888888",
-  border: "#E0E0E0",
-  danger: "#CC3333",
-  success: "#2E7D52",
-  warning: "#B07800",
+  bg: "#111111",
+  surface: "#1C1C1C",
+  surfaceAlt: "#242424",
+  primary: "#F0F0F0",
+  primarySoft: "#C0C0C0",
+  text: "#F0F0F0",
+  textDim: "#777777",
+  border: "#2C2C2C",
+  danger: "#E05555",
+  success: "#4A9E6E",
+  warning: "#C89A20",
 };
 
 export const SECTION_COLORS = [
