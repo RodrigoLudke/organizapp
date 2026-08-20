@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Pressable,
   ScrollView,
@@ -10,7 +11,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
-import { getSetting, setSetting } from "@/db/database";
+import { getSetting, setSetting, upsertTransactions } from "@/db/database";
+import { fetchAllTransactions } from "@/lib/pluggy";
 import { colors } from "@/theme";
 
 export default function SettingsScreen() {
@@ -19,6 +21,7 @@ export default function SettingsScreen() {
   const [clientSecret, setClientSecret] = useState("");
   const [itemId, setItemId] = useState("");
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -43,9 +46,39 @@ export default function SettingsScreen() {
     await setSetting("pluggy_client_id", id);
     await setSetting("pluggy_client_secret", secret);
     await setSetting("pluggy_item_id", item);
-    Alert.alert("Salvo!", "As credenciais foram salvas com sucesso.", [
-      { text: "OK", onPress: () => router.back() },
-    ]);
+
+    setSyncing(true);
+    try {
+      const today = new Date();
+      const from = new Date();
+      from.setMonth(from.getMonth() - 6);
+      const txs = await fetchAllTransactions(
+        item,
+        from.toISOString().split("T")[0],
+        today.toISOString().split("T")[0]
+      );
+      await upsertTransactions(
+        txs.map((tx) => ({
+          pluggy_id: tx.id,
+          account_id: tx.accountId,
+          account_name: tx.accountName,
+          description: tx.description,
+          amount: tx.amount,
+          date: tx.date,
+          type: tx.type,
+          category: tx.category,
+        }))
+      );
+      Alert.alert("Salvo!", "Credenciais salvas e transações sincronizadas.", [
+        { text: "OK", onPress: () => router.back() },
+      ]);
+    } catch (e) {
+      Alert.alert("Salvo!", "Credenciais salvas, mas a sincronização falhou. Tente novamente na aba Financeiro.\n\n" + String(e), [
+        { text: "OK", onPress: () => router.back() },
+      ]);
+    } finally {
+      setSyncing(false);
+    }
   };
 
   const handleClear = () => {
@@ -124,8 +157,12 @@ export default function SettingsScreen() {
         />
       </View>
 
-      <Pressable style={styles.saveBtn} onPress={handleSave}>
-        <Text style={styles.saveBtnText}>Salvar</Text>
+      <Pressable style={[styles.saveBtn, syncing && { opacity: 0.6 }]} onPress={handleSave} disabled={syncing}>
+        {syncing ? (
+          <ActivityIndicator color="#111111" />
+        ) : (
+          <Text style={styles.saveBtnText}>Salvar</Text>
+        )}
       </Pressable>
 
       {hasSaved && (

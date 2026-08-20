@@ -87,17 +87,24 @@ export default function FinanceiroTab({ extraBottom = 0 }: Props) {
   );
 
   const loadTransactions = useCallback(async () => {
-    setTransactions(await listTransactions(from, to));
+    const result = await listTransactions(from, to);
+    console.log(`[DB] listTransactions(${from}, ${to}): ${result.length} resultado(s)`);
+    setTransactions(result);
   }, [from, to]);
 
   // Sincroniza usando o item ID das configurações
   const syncItem = useCallback(async () => {
     const itemId = await getSetting("pluggy_item_id");
-    if (!itemId) return;
+    if (!itemId) {
+      console.log("[Sync] Item ID não configurado, sincronização ignorada");
+      return;
+    }
     setSyncing(true);
     try {
       const range = getSyncRange();
+      console.log(`[Sync] Buscando transações de ${range.from} até ${range.to}`);
       const txs = await fetchAllTransactions(itemId, range.from, range.to);
+      console.log(`[Sync] ${txs.length} transação(ões) retornada(s) pela API`);
       await upsertTransactions(
         txs.map((tx) => ({
           pluggy_id: tx.id,
@@ -112,6 +119,7 @@ export default function FinanceiroTab({ extraBottom = 0 }: Props) {
       );
       setLastSync(Date.now());
     } catch (e) {
+      console.error("[Sync] Erro:", e);
       Alert.alert("Erro ao sincronizar", String(e));
     } finally {
       setSyncing(false);

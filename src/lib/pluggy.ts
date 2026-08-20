@@ -57,35 +57,53 @@ export async function fetchAllTransactions(
   const accountsRes = await fetch(`${BASE}/accounts?itemId=${itemId}`, {
     headers: { "X-API-KEY": apiKey },
   });
-  if (!accountsRes.ok) throw new Error("Falha ao buscar contas");
-  const { results: accounts } = await accountsRes.json();
+  if (!accountsRes.ok) {
+    const body = await accountsRes.text().catch(() => "");
+    throw new Error(`Falha ao buscar contas (${accountsRes.status}): ${body}`);
+  }
+  const accountsData = await accountsRes.json();
+  const accounts: { id: string; name: string }[] = accountsData.results ?? [];
+  console.log(`[Pluggy] ${accounts.length} conta(s) encontrada(s) para o item ${itemId}`);
+
+  if (accounts.length === 0) {
+    throw new Error("Nenhuma conta encontrada para este item. Verifique se o banco foi conectado corretamente no Pluggy.");
+  }
 
   const all: PluggyTransaction[] = [];
-  for (const account of accounts ?? []) {
+  for (const account of accounts) {
     let page = 1;
     while (true) {
       const txRes = await fetch(
         `${BASE}/transactions?accountId=${account.id}&from=${from}&to=${to}&pageSize=100&page=${page}`,
         { headers: { "X-API-KEY": apiKey } }
       );
-      if (!txRes.ok) break;
-      const { results, totalPages } = await txRes.json();
-      for (const tx of results ?? []) {
+      if (!txRes.ok) {
+        const body = await txRes.text().catch(() => "");
+        throw new Error(`Falha ao buscar transações da conta ${account.name} (${txRes.status}): ${body}`);
+      }
+      const txData = await txRes.json();
+      const results: Record<string, unknown>[] = txData.results ?? [];
+      const totalPages: number = txData.totalPages ?? 1;
+      console.log(`[Pluggy] Conta "${account.name}" página ${page}/${totalPages}: ${results.length} transação(ões)`);
+      for (const tx of results) {
+        const rawDate = tx.date as string | undefined;
+        const date = rawDate ? rawDate.split("T")[0] : "";
         all.push({
-          id: tx.id,
-          description: tx.description ?? "",
-          amount: Math.abs(tx.amount),
-          date: (tx.date as string).split("T")[0],
-          type: tx.type,
-          category: tx.category ?? null,
+          id: tx.id as string,
+          description: (tx.description as string | undefined) ?? "",
+          amount: Math.abs(tx.amount as number),
+          date,
+          type: tx.type as "DEBIT" | "CREDIT",
+          category: (tx.category as string | undefined) ?? null,
           accountId: account.id,
           accountName: account.name ?? "",
         });
       }
-      if (page >= (totalPages ?? 1) || (results?.length ?? 0) < 100) break;
+      if (page >= totalPages || results.length < 100) break;
       page++;
     }
   }
+  console.log(`[Pluggy] Total: ${all.length} transação(ões) sincronizada(s)`);
   return all;
 }
 

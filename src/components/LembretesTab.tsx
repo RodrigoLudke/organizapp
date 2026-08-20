@@ -291,7 +291,7 @@ export default function LembretesTab({ extraBottom = 0 }: Props) {
 
       {/* FAB */}
       <Pressable
-        style={[styles.fab, { bottom: extraBottom - insets.bottom + 16 }]}
+        style={[styles.fab, { bottom: 16 }]}
         onPress={() => {
           if (allSections.length === 0) {
             Alert.alert(
