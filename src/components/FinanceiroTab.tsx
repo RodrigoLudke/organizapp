@@ -11,13 +11,10 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  listPluggyItems,
-  deletePluggyItem,
-  updatePluggyLastSync,
   upsertTransactions,
   listTransactions,
-  type PluggyItem,
   type Transaction,
+  getSetting,
 } from "@/db/database";
 import { fetchAllTransactions, hasPluggyCredentials } from "@/lib/pluggy";
 import { router } from "expo-router";
@@ -71,9 +68,9 @@ export default function FinanceiroTab({ extraBottom = 0 }: Props) {
   });
 
   const [hasCredentials, setHasCredentials] = useState<boolean | null>(null);
-  const [pluggyItems, setPluggyItems] = useState<PluggyItem[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [syncing, setSyncing] = useState(false);
+  const [lastSync, setLastSync] = useState<number | null>(null);
 
   const monthLabel = useMemo(
     () =>
@@ -89,16 +86,14 @@ export default function FinanceiroTab({ extraBottom = 0 }: Props) {
     [month]
   );
 
-  const loadPluggyItems = useCallback(async () => {
-    setPluggyItems(await listPluggyItems());
-  }, []);
-
   const loadTransactions = useCallback(async () => {
     setTransactions(await listTransactions(from, to));
   }, [from, to]);
 
-  // Sincroniza um banco específico
-  const syncItem = useCallback(async (itemId: string) => {
+  // Sincroniza usando o item ID das configurações
+  const syncItem = useCallback(async () => {
+    const itemId = await getSetting("pluggy_item_id");
+    if (!itemId) return;
     setSyncing(true);
     try {
       const range = getSyncRange();
@@ -115,7 +110,7 @@ export default function FinanceiroTab({ extraBottom = 0 }: Props) {
           category: tx.category,
         }))
       );
-      await updatePluggyLastSync(itemId);
+      setLastSync(Date.now());
     } catch (e) {
       Alert.alert("Erro ao sincronizar", String(e));
     } finally {
@@ -126,24 +121,14 @@ export default function FinanceiroTab({ extraBottom = 0 }: Props) {
   // Auto-sync: roda ao montar e verifica se há credenciais configuradas
   const autoSync = useCallback(async () => {
     const creds = await hasPluggyCredentials();
-    setHasCredentials(creds);
-    if (!creds) return;
-    const items = await listPluggyItems();
-    if (items.length === 0) return;
-    await loadPluggyItems();
-    const now = Date.now();
-    let synced = false;
-    for (const item of items) {
-      if (!item.last_sync || now - item.last_sync > AUTO_SYNC_INTERVAL_MS) {
-        await syncItem(item.item_id);
-        synced = true;
-      }
-    }
-    if (synced) await loadTransactions();
-  }, [syncItem, loadTransactions, loadPluggyItems]);
+    const itemId = await getSetting("pluggy_item_id");
+    setHasCredentials(!!(creds && itemId));
+    if (!creds || !itemId) return;
+    await syncItem();
+    await loadTransactions();
+  }, [syncItem, loadTransactions]);
 
   useEffect(() => {
-    loadPluggyItems();
     autoSync();
   }, []);
 
@@ -187,28 +172,8 @@ export default function FinanceiroTab({ extraBottom = 0 }: Props) {
     return Array.from(map.entries()).sort(([a], [b]) => b.localeCompare(a));
   }, [transactions]);
 
-  const handleDeleteBank = (item: PluggyItem) => {
-    Alert.alert(
-      item.bank_name,
-      "Remover este banco? As transações salvas serão mantidas.",
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Remover",
-          style: "destructive",
-          onPress: async () => {
-            await deletePluggyItem(item.item_id);
-            await loadPluggyItems();
-          },
-        },
-      ]
-    );
-  };
-
-  const handleSyncAll = async () => {
-    for (const item of pluggyItems) {
-      await syncItem(item.item_id);
-    }
+  const handleSync = async () => {
+    await syncItem();
     await loadTransactions();
   };
 
@@ -280,31 +245,24 @@ export default function FinanceiroTab({ extraBottom = 0 }: Props) {
         </View>
       </View>
 
-      {/* Bancos conectados */}
-      <View style={styles.banksRow}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.banksScroll}>
-          {pluggyItems.map((item) => (
-            <Pressable
-              key={item.item_id}
-              style={styles.bankChip}
-              onLongPress={() => handleDeleteBank(item)}
-            >
-              <Text style={styles.bankChipText}>{item.bank_name}</Text>
-              {item.last_sync && (
+      {/* Sync */}
+      {hasCredentials && (
+        <View style={styles.banksRow}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.banksScroll}>
+            {lastSync && (
+              <View style={styles.bankChip}>
+                <Text style={styles.bankChipText}>Pluggy</Text>
                 <Text style={styles.bankChipSub}>
-                  {new Date(item.last_sync).toLocaleTimeString("pt-BR", {
+                  {new Date(lastSync).toLocaleTimeString("pt-BR", {
                     hour: "2-digit",
                     minute: "2-digit",
                   })}
                 </Text>
-              )}
-            </Pressable>
-          ))}
-
-          {pluggyItems.length > 0 && (
+              </View>
+            )}
             <Pressable
               style={styles.syncBtn}
-              onPress={handleSyncAll}
+              onPress={handleSync}
               disabled={syncing}
             >
               {syncing ? (
@@ -313,9 +271,9 @@ export default function FinanceiroTab({ extraBottom = 0 }: Props) {
                 <Text style={styles.syncBtnText}>↻ Sync</Text>
               )}
             </Pressable>
-          )}
-        </ScrollView>
-      </View>
+          </ScrollView>
+        </View>
+      )}
 
       {/* Lista de transações */}
       {hasCredentials === false ? (
@@ -350,14 +308,6 @@ export default function FinanceiroTab({ extraBottom = 0 }: Props) {
             <Text style={styles.tutorialBtnText}>Ir para Configurações</Text>
           </Pressable>
         </ScrollView>
-      ) : pluggyItems.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyIcon}>💳</Text>
-          <Text style={styles.emptyTitle}>Aguardando sincronização</Text>
-          <Text style={styles.emptySubtitle}>
-            As transações serão carregadas automaticamente.
-          </Text>
-        </View>
       ) : (
         <FlatList
           data={grouped}

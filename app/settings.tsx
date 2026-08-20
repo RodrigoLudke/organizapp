@@ -17,14 +17,17 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
+  const [itemId, setItemId] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
       const id = await getSetting("pluggy_client_id");
       const secret = await getSetting("pluggy_client_secret");
+      const item = await getSetting("pluggy_item_id");
       if (id) setClientId(id);
       if (secret) setClientSecret(secret);
+      if (item) setItemId(item);
       setLoading(false);
     })();
   }, []);
@@ -32,12 +35,14 @@ export default function SettingsScreen() {
   const handleSave = async () => {
     const id = clientId.trim();
     const secret = clientSecret.trim();
-    if (!id || !secret) {
-      Alert.alert("Campos obrigatórios", "Preencha o Client ID e o Client Secret.");
+    const item = itemId.trim();
+    if (!id || !secret || !item) {
+      Alert.alert("Campos obrigatórios", "Preencha o Client ID, Client Secret e Item ID.");
       return;
     }
     await setSetting("pluggy_client_id", id);
     await setSetting("pluggy_client_secret", secret);
+    await setSetting("pluggy_item_id", item);
     Alert.alert("Salvo!", "As credenciais foram salvas com sucesso.", [
       { text: "OK", onPress: () => router.back() },
     ]);
@@ -55,8 +60,10 @@ export default function SettingsScreen() {
           onPress: async () => {
             await setSetting("pluggy_client_id", "");
             await setSetting("pluggy_client_secret", "");
+            await setSetting("pluggy_item_id", "");
             setClientId("");
             setClientSecret("");
+            setItemId("");
           },
         },
       ]
@@ -65,7 +72,7 @@ export default function SettingsScreen() {
 
   if (loading) return null;
 
-  const hasSaved = clientId.length > 0 && clientSecret.length > 0;
+  const hasSaved = clientId.length > 0 && clientSecret.length > 0 && itemId.length > 0;
 
   return (
     <ScrollView
@@ -103,6 +110,17 @@ export default function SettingsScreen() {
           autoCapitalize="none"
           autoCorrect={false}
           secureTextEntry
+        />
+
+        <Text style={styles.label}>Item ID</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Cole seu Item ID aqui"
+          placeholderTextColor={colors.textDim}
+          value={itemId}
+          onChangeText={setItemId}
+          autoCapitalize="none"
+          autoCorrect={false}
         />
       </View>
 
