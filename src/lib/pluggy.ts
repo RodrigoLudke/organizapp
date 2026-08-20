@@ -73,13 +73,9 @@ export async function fetchAllTransactions(
   for (const account of accounts) {
     let cursor: string | null = null;
     let pageNum = 1;
+    let reachedFrom = false;
     while (true) {
-      const params = new URLSearchParams({
-        accountId: account.id,
-        from,
-        to,
-        pageSize: "100",
-      });
+      const params = new URLSearchParams({ accountId: account.id });
       if (cursor) params.set("cursor", cursor);
 
       const txRes = await fetch(`${BASE}/v2/transactions?${params}`, {
@@ -91,13 +87,19 @@ export async function fetchAllTransactions(
       }
       const txData = await txRes.json();
       const results: Record<string, unknown>[] = txData.results ?? [];
-      // A v2 usa cursor para paginação — campo pode ser "cursor" ou "next"
       const nextCursor: string | null = txData.cursor ?? txData.next ?? null;
-      console.log(`[Pluggy] Conta "${account.name}" página ${pageNum}: ${results.length} transação(ões), próximo cursor: ${nextCursor ?? "nenhum"}`);
+      console.log(`[Pluggy] Conta "${account.name}" página ${pageNum}: ${results.length} transação(ões)`);
 
       for (const tx of results) {
         const rawDate = tx.date as string | undefined;
         const date = rawDate ? rawDate.split("T")[0] : "";
+        // Para quando chegar antes do início do período desejado
+        if (date < from) {
+          reachedFrom = true;
+          break;
+        }
+        // Ignora transações além do fim do período
+        if (date > to) continue;
         all.push({
           id: tx.id as string,
           description: (tx.description as string | undefined) ?? "",
@@ -110,7 +112,7 @@ export async function fetchAllTransactions(
         });
       }
 
-      if (!nextCursor || results.length === 0) break;
+      if (reachedFrom || !nextCursor || results.length === 0) break;
       cursor = nextCursor;
       pageNum++;
     }
