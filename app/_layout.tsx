@@ -49,6 +49,10 @@ export default function RootLayout() {
           name="edit"
           options={{ title: "Novo", presentation: "modal" }}
         />
+        <Stack.Screen
+          name="settings"
+          options={{ title: "Configurações", presentation: "modal" }}
+        />
       </Stack>
     </SafeAreaProvider>
   );

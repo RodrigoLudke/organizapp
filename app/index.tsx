@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Stack, router } from "expo-router";
 import { colors } from "@/theme";
 import LembretesTab from "@/components/LembretesTab";
 import FinanceiroTab from "@/components/FinanceiroTab";
@@ -17,6 +18,20 @@ export default function Home() {
 
   return (
     <View style={styles.root}>
+      <Stack.Screen
+        options={{
+          title: "OrganizApp",
+          headerRight: () => (
+            <Pressable
+              onPress={() => router.push("/settings")}
+              style={styles.gearBtn}
+              hitSlop={8}
+            >
+              <Text style={styles.gearIcon}>⚙️</Text>
+            </Pressable>
+          ),
+        }}
+      />
       {/* Ambas as abas ficam montadas para preservar estado */}
       <View style={[styles.tabContent, activeTab !== "lembretes" && styles.hidden]}>
         <LembretesTab extraBottom={extraBottom} />
@@ -78,4 +93,6 @@ const styles = StyleSheet.create({
   tabIconActive: { opacity: 1 },
   tabLabel: { fontSize: 11, color: colors.textDim, fontWeight: "600" },
   tabLabelActive: { color: colors.text },
+  gearBtn: { marginRight: 4 },
+  gearIcon: { fontSize: 20 },
 });

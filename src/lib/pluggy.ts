@@ -1,12 +1,23 @@
-import { PLUGGY_CLIENT_ID, PLUGGY_CLIENT_SECRET } from "../config";
+import { getSetting } from "../db/database";
 
 const BASE = "https://api.pluggy.ai";
 
+export async function hasPluggyCredentials(): Promise<boolean> {
+  const clientId = await getSetting("pluggy_client_id");
+  const clientSecret = await getSetting("pluggy_client_secret");
+  return !!(clientId && clientSecret);
+}
+
 async function getApiKey(): Promise<string> {
+  const clientId = await getSetting("pluggy_client_id");
+  const clientSecret = await getSetting("pluggy_client_secret");
+  if (!clientId || !clientSecret) {
+    throw new Error("Credenciais do Pluggy não configuradas. Acesse as configurações para adicionar.");
+  }
   const res = await fetch(`${BASE}/auth`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ clientId: PLUGGY_CLIENT_ID, clientSecret: PLUGGY_CLIENT_SECRET }),
+    body: JSON.stringify({ clientId, clientSecret }),
   });
   if (!res.ok) throw new Error("Autenticação Pluggy falhou");
   const data = await res.json();

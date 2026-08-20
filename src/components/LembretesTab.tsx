@@ -26,6 +26,16 @@ import { colors } from "@/theme";
 import ItemCard from "@/components/ItemCard";
 import ColorPicker from "react-native-wheel-color-picker";
 
+function getContrastColor(hex: string): string {
+  const c = hex.replace("#", "");
+  const r = parseInt(c.substring(0, 2), 16);
+  const g = parseInt(c.substring(2, 4), 16);
+  const b = parseInt(c.substring(4, 6), 16);
+  // Relative luminance (WCAG formula)
+  const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+  return luminance > 140 ? "#111111" : "#ffffff";
+}
+
 type DoneFilter = "all" | "pending" | "done";
 
 const DONE_FILTERS: { key: DoneFilter; label: string }[] = [
@@ -49,6 +59,7 @@ export default function LembretesTab({ extraBottom = 0 }: Props) {
   const [showNewSection, setShowNewSection] = useState(false);
   const [newName, setNewName] = useState("");
   const [newColor, setNewColor] = useState(colors.primary);
+  const [pickerColor, setPickerColor] = useState(colors.primary);
 
   const [showSectionPicker, setShowSectionPicker] = useState(false);
 
@@ -78,7 +89,8 @@ export default function LembretesTab({ extraBottom = 0 }: Props) {
   useFocusEffect(
     useCallback(() => {
       loadSections();
-    }, [loadSections])
+      loadItems();
+    }, [loadSections, loadItems])
   );
 
   useEffect(() => {
@@ -112,6 +124,7 @@ export default function LembretesTab({ extraBottom = 0 }: Props) {
     });
     setNewName("");
     setNewColor(colors.primary);
+    setPickerColor(colors.primary);
     setShowNewSection(false);
     await loadSections();
   };
@@ -278,7 +291,7 @@ export default function LembretesTab({ extraBottom = 0 }: Props) {
 
       {/* FAB */}
       <Pressable
-        style={[styles.fab, { bottom: insets.bottom + 24 + extraBottom }]}
+        style={[styles.fab, { bottom: 24 + extraBottom }]}
         onPress={() => {
           if (allSections.length === 0) {
             Alert.alert(
@@ -400,8 +413,12 @@ export default function LembretesTab({ extraBottom = 0 }: Props) {
             <Text style={styles.modalLabel}>Cor</Text>
             <View style={styles.colorPickerWrap}>
               <ColorPicker
-                color={newColor}
+                color={pickerColor}
                 onColorChange={setNewColor}
+                onColorChangeComplete={(c) => {
+                  setNewColor(c);
+                  setPickerColor(c);
+                }}
                 thumbSize={24}
                 sliderSize={24}
                 noSnap
@@ -411,7 +428,7 @@ export default function LembretesTab({ extraBottom = 0 }: Props) {
             </View>
 
             <View style={[styles.previewChip, { backgroundColor: newColor }]}>
-              <Text style={styles.previewText}>
+              <Text style={[styles.previewText, { color: getContrastColor(newColor) }]}>
                 {newName || "Nome da seção"}
               </Text>
             </View>
@@ -579,16 +596,17 @@ const styles = StyleSheet.create({
   },
   colorPickerWrap: {
     height: 220,
-    marginBottom: 16,
+    marginBottom: 24,
   },
   previewChip: {
     alignSelf: "flex-start",
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
+    marginTop: 8,
     marginBottom: 20,
   },
-  previewText: { color: colors.bg, fontWeight: "700", fontSize: 14 },
+  previewText: { fontWeight: "700", fontSize: 14 },
   modalActions: { flexDirection: "row", gap: 12 },
   cancelBtn: {
     flex: 1,

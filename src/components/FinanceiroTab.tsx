@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,10 +10,8 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import WebView from "react-native-webview";
 import {
   listPluggyItems,
-  upsertPluggyItem,
   deletePluggyItem,
   updatePluggyLastSync,
   upsertTransactions,
@@ -22,7 +19,8 @@ import {
   type PluggyItem,
   type Transaction,
 } from "@/db/database";
-import { fetchAllTransactions, getConnectToken, buildConnectHtml } from "@/lib/pluggy";
+import { fetchAllTransactions, hasPluggyCredentials } from "@/lib/pluggy";
+import { router } from "expo-router";
 import { colors } from "@/theme";
 
 // Sincroniza os últimos N meses
@@ -72,14 +70,10 @@ export default function FinanceiroTab({ extraBottom = 0 }: Props) {
     return { year: now.getFullYear(), month: now.getMonth() + 1 };
   });
 
+  const [hasCredentials, setHasCredentials] = useState<boolean | null>(null);
   const [pluggyItems, setPluggyItems] = useState<PluggyItem[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [syncing, setSyncing] = useState(false);
-  const [connecting, setConnecting] = useState(false);
-
-  // WebView do Pluggy Connect
-  const [showConnect, setShowConnect] = useState(false);
-  const [connectHtml, setConnectHtml] = useState("");
 
   const monthLabel = useMemo(
     () =>
@@ -129,10 +123,14 @@ export default function FinanceiroTab({ extraBottom = 0 }: Props) {
     }
   }, []);
 
-  // Auto-sync na abertura: sincroniza bancos cujo last_sync passou do intervalo
+  // Auto-sync: roda ao montar e verifica se há credenciais configuradas
   const autoSync = useCallback(async () => {
+    const creds = await hasPluggyCredentials();
+    setHasCredentials(creds);
+    if (!creds) return;
     const items = await listPluggyItems();
     if (items.length === 0) return;
+    await loadPluggyItems();
     const now = Date.now();
     let synced = false;
     for (const item of items) {
@@ -142,7 +140,7 @@ export default function FinanceiroTab({ extraBottom = 0 }: Props) {
       }
     }
     if (synced) await loadTransactions();
-  }, [syncItem, loadTransactions]);
+  }, [syncItem, loadTransactions, loadPluggyItems]);
 
   useEffect(() => {
     loadPluggyItems();
@@ -188,39 +186,6 @@ export default function FinanceiroTab({ extraBottom = 0 }: Props) {
     }
     return Array.from(map.entries()).sort(([a], [b]) => b.localeCompare(a));
   }, [transactions]);
-
-  // Abre o widget Pluggy Connect
-  const openConnect = async (itemId?: string) => {
-    setConnecting(true);
-    try {
-      const token = await getConnectToken(itemId);
-      setConnectHtml(buildConnectHtml(token));
-      setShowConnect(true);
-    } catch (e) {
-      Alert.alert("Erro", String(e));
-    } finally {
-      setConnecting(false);
-    }
-  };
-
-  // Recebe mensagem do WebView do Pluggy Connect
-  const onWebViewMessage = async (event: { nativeEvent: { data: string } }) => {
-    try {
-      const msg = JSON.parse(event.nativeEvent.data);
-      if (msg.type === "success" && msg.itemId) {
-        setShowConnect(false);
-        await upsertPluggyItem(msg.itemId, msg.bankName || "Banco");
-        await loadPluggyItems();
-        await syncItem(msg.itemId);
-        await loadTransactions();
-      } else if (msg.type === "error") {
-        setShowConnect(false);
-        Alert.alert("Erro ao conectar banco", msg.message);
-      } else if (msg.type === "close") {
-        setShowConnect(false);
-      }
-    } catch {}
-  };
 
   const handleDeleteBank = (item: PluggyItem) => {
     Alert.alert(
@@ -336,18 +301,6 @@ export default function FinanceiroTab({ extraBottom = 0 }: Props) {
             </Pressable>
           ))}
 
-          <Pressable
-            style={styles.addBankBtn}
-            onPress={() => openConnect()}
-            disabled={connecting}
-          >
-            {connecting ? (
-              <ActivityIndicator size="small" color={colors.primary} />
-            ) : (
-              <Text style={styles.addBankBtnText}>+ Banco</Text>
-            )}
-          </Pressable>
-
           {pluggyItems.length > 0 && (
             <Pressable
               style={styles.syncBtn}
@@ -365,24 +318,45 @@ export default function FinanceiroTab({ extraBottom = 0 }: Props) {
       </View>
 
       {/* Lista de transações */}
-      {pluggyItems.length === 0 ? (
+      {hasCredentials === false ? (
+        <ScrollView
+          contentContainerStyle={[styles.tutorialContainer, { paddingBottom: 24 + extraBottom }]}
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={styles.tutorialTitle}>Como conectar seu banco</Text>
+          <Text style={styles.tutorialSubtitle}>
+            O OrganizApp usa o Pluggy para sincronizar suas transações bancárias de
+            forma segura. Para uso pessoal é 100% gratuito!
+          </Text>
+
+          {[
+            { step: "1", text: "Acesse dashboard.pluggy.ai e crie uma conta gratuita" },
+            { step: "2", text: 'Vá em "Applications" e crie uma nova aplicação' },
+            { step: "3", text: 'Copie o "Client ID" e o "Client Secret" da sua aplicação' },
+            { step: "4", text: 'Toque em "Configurações" abaixo e cole as chaves' },
+          ].map(({ step, text }) => (
+            <View key={step} style={styles.tutorialStep}>
+              <View style={styles.tutorialStepBadge}>
+                <Text style={styles.tutorialStepNum}>{step}</Text>
+              </View>
+              <Text style={styles.tutorialStepText}>{text}</Text>
+            </View>
+          ))}
+
+          <Pressable
+            style={styles.tutorialBtn}
+            onPress={() => router.push("/settings")}
+          >
+            <Text style={styles.tutorialBtnText}>Ir para Configurações</Text>
+          </Pressable>
+        </ScrollView>
+      ) : pluggyItems.length === 0 ? (
         <View style={styles.emptyState}>
           <Text style={styles.emptyIcon}>💳</Text>
-          <Text style={styles.emptyTitle}>Nenhum banco conectado</Text>
+          <Text style={styles.emptyTitle}>Aguardando sincronização</Text>
           <Text style={styles.emptySubtitle}>
-            Conecte seu banco para ver as transações automaticamente.
+            As transações serão carregadas automaticamente.
           </Text>
-          <Pressable
-            style={styles.connectCta}
-            onPress={() => openConnect()}
-            disabled={connecting}
-          >
-            {connecting ? (
-              <ActivityIndicator color="#111" />
-            ) : (
-              <Text style={styles.connectCtaText}>Conectar banco</Text>
-            )}
-          </Pressable>
         </View>
       ) : (
         <FlatList
@@ -415,29 +389,6 @@ export default function FinanceiroTab({ extraBottom = 0 }: Props) {
         </View>
       )}
 
-      {/* Modal: Pluggy Connect */}
-      <Modal
-        visible={showConnect}
-        animationType="slide"
-        onRequestClose={() => setShowConnect(false)}
-      >
-        <View style={[styles.webViewContainer, { paddingTop: insets.top }]}>
-          <View style={styles.webViewHeader}>
-            <Pressable onPress={() => setShowConnect(false)}>
-              <Text style={styles.webViewClose}>✕ Fechar</Text>
-            </Pressable>
-            <Text style={styles.webViewTitle}>Conectar banco</Text>
-            <View style={{ width: 60 }} />
-          </View>
-          <WebView
-            source={{ html: connectHtml }}
-            onMessage={onWebViewMessage}
-            javaScriptEnabled
-            domStorageEnabled
-            style={{ flex: 1, backgroundColor: "#111111" }}
-          />
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -506,17 +457,6 @@ const styles = StyleSheet.create({
   },
   bankChipText: { color: colors.text, fontSize: 13, fontWeight: "600" },
   bankChipSub: { color: colors.textDim, fontSize: 10, marginTop: 1 },
-  addBankBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    borderStyle: "dashed",
-    minWidth: 80,
-    alignItems: "center",
-  },
-  addBankBtnText: { color: colors.primary, fontSize: 13, fontWeight: "700" },
   syncBtn: {
     paddingHorizontal: 14,
     paddingVertical: 8,
@@ -561,15 +501,6 @@ const styles = StyleSheet.create({
   emptyIcon: { fontSize: 48 },
   emptyTitle: { color: colors.text, fontSize: 18, fontWeight: "700", textAlign: "center" },
   emptySubtitle: { color: colors.textDim, fontSize: 14, textAlign: "center", lineHeight: 20 },
-  connectCta: {
-    marginTop: 8,
-    backgroundColor: colors.primary,
-    paddingHorizontal: 28,
-    paddingVertical: 14,
-    borderRadius: 14,
-  },
-  connectCtaText: { color: "#111111", fontWeight: "800", fontSize: 15 },
-
   syncOverlay: {
     position: "absolute",
     bottom: 100,
@@ -586,16 +517,46 @@ const styles = StyleSheet.create({
   },
   syncOverlayText: { color: colors.textDim, fontSize: 13 },
 
-  webViewContainer: { flex: 1, backgroundColor: "#111111" },
-  webViewHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+  tutorialContainer: {
+    padding: 20,
+    gap: 0,
   },
-  webViewClose: { color: colors.danger, fontSize: 14, fontWeight: "600", width: 60 },
-  webViewTitle: { color: colors.text, fontSize: 16, fontWeight: "700" },
+  tutorialTitle: {
+    color: colors.text,
+    fontSize: 20,
+    fontWeight: "800",
+    marginBottom: 10,
+  },
+  tutorialSubtitle: {
+    color: colors.textDim,
+    fontSize: 14,
+    lineHeight: 21,
+    marginBottom: 28,
+  },
+  tutorialStep: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 14,
+    marginBottom: 18,
+  },
+  tutorialStepBadge: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+    marginTop: 1,
+  },
+  tutorialStepNum: { color: "#111111", fontWeight: "800", fontSize: 14 },
+  tutorialStepText: { color: colors.text, fontSize: 14, lineHeight: 21, flex: 1 },
+  tutorialBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: 14,
+    padding: 16,
+    alignItems: "center",
+    marginTop: 16,
+  },
+  tutorialBtnText: { color: "#111111", fontWeight: "800", fontSize: 15 },
 });

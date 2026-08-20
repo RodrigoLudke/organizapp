@@ -188,6 +188,18 @@ export async function initDatabase(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date DESC);
     `);
     await db.execAsync(`PRAGMA user_version = 3;`);
+    currentVersion = 3;
+  }
+
+  if (currentVersion < 4) {
+    // v3→v4: configurações do app (chaves Pluggy inseridas pelo usuário)
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+    `);
+    await db.execAsync(`PRAGMA user_version = 4;`);
   }
 }
 
@@ -428,5 +440,25 @@ export async function listTransactions(from: string, to: string): Promise<Transa
   return db.getAllAsync<Transaction>(
     `SELECT * FROM transactions WHERE date >= ? AND date <= ? ORDER BY date DESC, id DESC`,
     [from, to]
+  );
+}
+
+// ─── Settings ─────────────────────────────────────────────────────────────────
+
+export async function getSetting(key: string): Promise<string | null> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ value: string }>(
+    `SELECT value FROM settings WHERE key = ?`,
+    [key]
+  );
+  return row?.value ?? null;
+}
+
+export async function setSetting(key: string, value: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT INTO settings (key, value) VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+    [key, value]
   );
 }
