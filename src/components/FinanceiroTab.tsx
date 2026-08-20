@@ -295,11 +295,32 @@ export default function FinanceiroTab({ extraBottom = 0 }: Props) {
             forma segura. Para uso pessoal é 100% gratuito!
           </Text>
 
+          <Text style={[styles.tutorialSubtitle, { fontWeight: "700", marginBottom: 4 }]}>
+            Parte 1 — Client ID e Client Secret
+          </Text>
+
           {[
-            { step: "1", text: "Acesse dashboard.pluggy.ai e crie uma conta gratuita" },
-            { step: "2", text: 'Vá em "Applications" e crie uma nova aplicação' },
-            { step: "3", text: 'Copie o "Client ID" e o "Client Secret" da sua aplicação' },
-            { step: "4", text: 'Toque em "Configurações" abaixo e cole as chaves' },
+            { step: "1", text: "Crie uma conta gratuita em meu.pluggy.ai — seu Data Passport pessoal" },
+            { step: "2", text: "Conecte suas contas bancárias no Meu Pluggy (Nubank, Itaú, Bradesco, Inter e mais)" },
+            { step: "3", text: "Acesse dashboard.pluggy.ai, entre na aplicação demo e conecte seus itens do Meu Pluggy como proxy" },
+            { step: "4", text: 'Copie o "Client ID" e o "Client Secret" da aplicação demo' },
+          ].map(({ step, text }) => (
+            <View key={step} style={styles.tutorialStep}>
+              <View style={styles.tutorialStepBadge}>
+                <Text style={styles.tutorialStepNum}>{step}</Text>
+              </View>
+              <Text style={styles.tutorialStepText}>{text}</Text>
+            </View>
+          ))}
+
+          <Text style={[styles.tutorialSubtitle, { fontWeight: "700", marginBottom: 4, marginTop: 12 }]}>
+            Parte 2 — Item ID (sua conta real)
+          </Text>
+
+          {[
+            { step: "5", text: 'Dentro do dashboard da Pluggy, solicite acesso à "Demonstração com dados reais"' },
+            { step: "6", text: "Após aprovação, conecte sua conta bancária pela demonstração e copie o Item ID gerado" },
+            { step: "7", text: 'Toque em "Configurações" abaixo, cole o Client ID, Client Secret e Item ID, e salve' },
           ].map(({ step, text }) => (
             <View key={step} style={styles.tutorialStep}>
               <View style={styles.tutorialStepBadge}>
