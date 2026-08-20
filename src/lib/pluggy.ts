@@ -71,20 +71,30 @@ export async function fetchAllTransactions(
 
   const all: PluggyTransaction[] = [];
   for (const account of accounts) {
-    let page = 1;
+    let cursor: string | null = null;
+    let pageNum = 1;
     while (true) {
-      const txRes = await fetch(
-        `${BASE}/transactions?accountId=${account.id}&from=${from}&to=${to}&pageSize=100&page=${page}`,
-        { headers: { "X-API-KEY": apiKey } }
-      );
+      const params = new URLSearchParams({
+        accountId: account.id,
+        from,
+        to,
+        pageSize: "100",
+      });
+      if (cursor) params.set("cursor", cursor);
+
+      const txRes = await fetch(`${BASE}/v2/transactions?${params}`, {
+        headers: { "X-API-KEY": apiKey },
+      });
       if (!txRes.ok) {
         const body = await txRes.text().catch(() => "");
         throw new Error(`Falha ao buscar transações da conta ${account.name} (${txRes.status}): ${body}`);
       }
       const txData = await txRes.json();
       const results: Record<string, unknown>[] = txData.results ?? [];
-      const totalPages: number = txData.totalPages ?? 1;
-      console.log(`[Pluggy] Conta "${account.name}" página ${page}/${totalPages}: ${results.length} transação(ões)`);
+      // A v2 usa cursor para paginação — campo pode ser "cursor" ou "next"
+      const nextCursor: string | null = txData.cursor ?? txData.next ?? null;
+      console.log(`[Pluggy] Conta "${account.name}" página ${pageNum}: ${results.length} transação(ões), próximo cursor: ${nextCursor ?? "nenhum"}`);
+
       for (const tx of results) {
         const rawDate = tx.date as string | undefined;
         const date = rawDate ? rawDate.split("T")[0] : "";
@@ -99,8 +109,10 @@ export async function fetchAllTransactions(
           accountName: account.name ?? "",
         });
       }
-      if (page >= totalPages || results.length < 100) break;
-      page++;
+
+      if (!nextCursor || results.length === 0) break;
+      cursor = nextCursor;
+      pageNum++;
     }
   }
   console.log(`[Pluggy] Total: ${all.length} transação(ões) sincronizada(s)`);
