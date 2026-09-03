@@ -24,6 +24,11 @@ if (!isExpoGo) {
   }
 }
 
+// 1 = Domingo, 2 = Segunda, ..., 7 = Sábado (padrão expo-notifications)
+export type Recurrence =
+  | { type: "daily"; hour: number; minute: number }
+  | { type: "weekly"; days: number[]; hour: number; minute: number };
+
 export async function setupNotifications(): Promise<boolean> {
   if (!N) return false;
 
@@ -66,10 +71,62 @@ export async function scheduleReminder(
   });
 }
 
+export async function scheduleRecurringReminder(
+  title: string,
+  body: string,
+  recurrence: Recurrence
+): Promise<string | null> {
+  if (!N) return null;
+
+  const content = {
+    title: title || "Lembrete",
+    body: body || "Você tem um lembrete!",
+    sound: true,
+  };
+
+  if (recurrence.type === "daily") {
+    const id = await N.scheduleNotificationAsync({
+      content,
+      trigger: {
+        type: N.SchedulableTriggerInputTypes.DAILY,
+        hour: recurrence.hour,
+        minute: recurrence.minute,
+        channelId: "reminders",
+      },
+    });
+    return id;
+  } else {
+    // weekly: uma notificação por dia selecionado
+    const ids: string[] = [];
+    for (const weekday of recurrence.days) {
+      const id = await N.scheduleNotificationAsync({
+        content,
+        trigger: {
+          type: N.SchedulableTriggerInputTypes.WEEKLY,
+          weekday,
+          hour: recurrence.hour,
+          minute: recurrence.minute,
+          channelId: "reminders",
+        },
+      });
+      ids.push(id);
+    }
+    return ids.length > 0 ? JSON.stringify(ids) : null;
+  }
+}
+
 export async function cancelReminder(id: string | null): Promise<void> {
   if (!N || !id) return;
   try {
-    await N.cancelScheduledNotificationAsync(id);
+    if (id.startsWith("[")) {
+      // JSON array — recorrência com múltiplos dias
+      const ids = JSON.parse(id) as string[];
+      for (const singleId of ids) {
+        await N.cancelScheduledNotificationAsync(singleId).catch(() => {});
+      }
+    } else {
+      await N.cancelScheduledNotificationAsync(id);
+    }
   } catch {
     // já pode ter disparado/expirado — sem problema
   }

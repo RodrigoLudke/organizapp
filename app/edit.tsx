@@ -20,7 +20,12 @@ import {
   updateItem,
   type Section,
 } from "@/db/database";
-import { cancelReminder, scheduleReminder } from "@/lib/notifications";
+import {
+  cancelReminder,
+  scheduleReminder,
+  scheduleRecurringReminder,
+  type Recurrence,
+} from "@/lib/notifications";
 import { colors } from "@/theme";
 
 function getContrastColor(hex: string): string {
@@ -31,6 +36,20 @@ function getContrastColor(hex: string): string {
   const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
   return luminance > 140 ? "#111111" : "#ffffff";
 }
+
+// 1=Dom, 2=Seg, 3=Ter, 4=Qua, 5=Qui, 6=Sex, 7=Sáb (padrão expo-notifications)
+const WEEK_DAYS = [
+  { label: "Dom", value: 1 },
+  { label: "Seg", value: 2 },
+  { label: "Ter", value: 3 },
+  { label: "Qua", value: 4 },
+  { label: "Qui", value: 5 },
+  { label: "Sex", value: 6 },
+  { label: "Sáb", value: 7 },
+];
+
+type ReminderMode = "none" | "once" | "recurring";
+type RecurringType = "daily" | "weekly";
 
 export default function EditScreen() {
   const insets = useSafeAreaInsets();
@@ -46,17 +65,28 @@ export default function EditScreen() {
   );
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [existingNotifId, setExistingNotifId] = useState<string | null>(null);
+
+  // Modo do lembrete
+  const [reminderMode, setReminderMode] = useState<ReminderMode>("none");
+
+  // Lembrete pontual
   const [remindAt, setRemindAt] = useState<Date | null>(null);
   const [showPicker, setShowPicker] = useState(false);
   const [pickerMode, setPickerMode] = useState<"date" | "time">("date");
-  const [existingNotifId, setExistingNotifId] = useState<string | null>(null);
+
+  // Lembrete recorrente
+  const [recurringType, setRecurringType] = useState<RecurringType>("daily");
+  const [recurringHour, setRecurringHour] = useState(8);
+  const [recurringMinute, setRecurringMinute] = useState(0);
+  const [recurringDays, setRecurringDays] = useState<number[]>([]);
+  const [showTimePicker, setShowTimePicker] = useState(false);
 
   useEffect(() => {
     navigation.setOptions({ title: editing ? "Editar" : "Novo" });
 
     listSections().then((list) => {
       setSections(list);
-      // Se não veio section_id no param, pega o primeiro disponível
       if (!sectionIdParam && !itemId && list.length > 0) {
         setSectionId(list[0].id);
       }
@@ -68,33 +98,53 @@ export default function EditScreen() {
         setSectionId(it.section_id);
         setTitle(it.title);
         setContent(it.content);
-        setRemindAt(it.remind_at ? new Date(it.remind_at) : null);
         setExistingNotifId(it.notification_id);
+
+        if (it.recurrence) {
+          const rec = JSON.parse(it.recurrence) as Recurrence;
+          setReminderMode("recurring");
+          setRecurringType(rec.type);
+          setRecurringHour(rec.hour);
+          setRecurringMinute(rec.minute);
+          if (rec.type === "weekly") setRecurringDays(rec.days);
+        } else if (it.remind_at) {
+          setReminderMode("once");
+          setRemindAt(new Date(it.remind_at));
+        }
       });
     }
   }, [itemId]);
 
-  const openPicker = (mode: "date" | "time") => {
+  const openOncePicker = (mode: "date" | "time") => {
     if (!remindAt) setRemindAt(defaultReminderDate());
     setPickerMode(mode);
     setShowPicker(true);
   };
 
-  const onPickerChange = (event: any, selected?: Date) => {
+  const onOncePicker = (event: any, selected?: Date) => {
     setShowPicker(Platform.OS === "ios");
     if (event.type === "dismissed" || !selected) return;
     const base = remindAt ?? defaultReminderDate();
     const next = new Date(base);
     if (pickerMode === "date") {
-      next.setFullYear(
-        selected.getFullYear(),
-        selected.getMonth(),
-        selected.getDate()
-      );
+      next.setFullYear(selected.getFullYear(), selected.getMonth(), selected.getDate());
     } else {
       next.setHours(selected.getHours(), selected.getMinutes(), 0, 0);
     }
     setRemindAt(next);
+  };
+
+  const onTimePicker = (event: any, selected?: Date) => {
+    setShowTimePicker(Platform.OS === "ios");
+    if (event.type === "dismissed" || !selected) return;
+    setRecurringHour(selected.getHours());
+    setRecurringMinute(selected.getMinutes());
+  };
+
+  const toggleDay = (day: number) => {
+    setRecurringDays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
+    );
   };
 
   const handleSave = async () => {
@@ -107,25 +157,44 @@ export default function EditScreen() {
       return;
     }
 
+    // Validações de recorrência
+    if (reminderMode === "recurring" && recurringType === "weekly" && recurringDays.length === 0) {
+      Alert.alert("Ops", "Selecione pelo menos um dia da semana.");
+      return;
+    }
+
     await cancelReminder(existingNotifId);
     let notifId: string | null = null;
-    if (remindAt) {
+    let recurrenceJson: string | null = null;
+    let remindAtMs: number | null = null;
+
+    if (reminderMode === "once") {
+      if (!remindAt) {
+        Alert.alert("Ops", "Escolha a data e hora do lembrete.");
+        return;
+      }
       if (remindAt.getTime() <= Date.now()) {
-        Alert.alert(
-          "Data no passado",
-          "Escolha uma data futura para receber o lembrete."
-        );
+        Alert.alert("Data no passado", "Escolha uma data futura para receber o lembrete.");
         return;
       }
       notifId = await scheduleReminder(title.trim(), content.trim(), remindAt);
+      remindAtMs = remindAt.getTime();
+    } else if (reminderMode === "recurring") {
+      const recurrence: Recurrence =
+        recurringType === "daily"
+          ? { type: "daily", hour: recurringHour, minute: recurringMinute }
+          : { type: "weekly", days: recurringDays, hour: recurringHour, minute: recurringMinute };
+      notifId = await scheduleRecurringReminder(title.trim(), content.trim(), recurrence);
+      recurrenceJson = JSON.stringify(recurrence);
     }
 
     const payload = {
       section_id: sectionId,
       title: title.trim(),
       content: content.trim(),
-      remind_at: remindAt ? remindAt.getTime() : null,
+      remind_at: remindAtMs,
       notification_id: notifId,
+      recurrence: recurrenceJson,
     };
 
     if (itemId) {
@@ -152,6 +221,8 @@ export default function EditScreen() {
       },
     ]);
   };
+
+  const recurringTimeLabel = `${String(recurringHour).padStart(2, "0")}:${String(recurringMinute).padStart(2, "0")}`;
 
   return (
     <ScrollView
@@ -207,6 +278,8 @@ export default function EditScreen() {
         placeholderTextColor={colors.textDim}
         value={title}
         onChangeText={setTitle}
+        multiline
+        textAlignVertical="top"
       />
 
       {/* Detalhes */}
@@ -221,39 +294,115 @@ export default function EditScreen() {
         textAlignVertical="top"
       />
 
-      {/* Lembrete (opcional para qualquer item) */}
+      {/* Lembrete */}
       <View style={styles.reminderBox}>
-        <Text style={styles.label}>Lembrete (opcional)</Text>
-        <View style={styles.dateRow}>
-          <Pressable style={styles.dateBtn} onPress={() => openPicker("date")}>
-            <Text style={styles.dateBtnText}>
-              📅 {remindAt ? remindAt.toLocaleDateString("pt-BR") : "Data"}
-            </Text>
-          </Pressable>
-          <Pressable style={styles.dateBtn} onPress={() => openPicker("time")}>
-            <Text style={styles.dateBtnText}>
-              🕐{" "}
-              {remindAt
-                ? remindAt.toLocaleTimeString("pt-BR", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })
-                : "Hora"}
-            </Text>
-          </Pressable>
+        <Text style={styles.label}>Lembrete</Text>
+
+        {/* Seletor de modo */}
+        <View style={styles.modeRow}>
+          {(["none", "once", "recurring"] as ReminderMode[]).map((m) => (
+            <Pressable
+              key={m}
+              onPress={() => setReminderMode(m)}
+              style={[styles.modeChip, reminderMode === m && styles.modeChipActive]}
+            >
+              <Text style={[styles.modeChipText, reminderMode === m && styles.modeChipTextActive]}>
+                {m === "none" ? "Sem lembrete" : m === "once" ? "Uma vez" : "Repetir"}
+              </Text>
+            </Pressable>
+          ))}
         </View>
-        {remindAt && (
-          <Pressable onPress={() => setRemindAt(null)} style={styles.clearBtn}>
-            <Text style={styles.clearBtnText}>Remover lembrete</Text>
-          </Pressable>
+
+        {/* Lembrete pontual */}
+        {reminderMode === "once" && (
+          <View style={styles.onceSection}>
+            <View style={styles.dateRow}>
+              <Pressable style={styles.dateBtn} onPress={() => openOncePicker("date")}>
+                <Text style={styles.dateBtnText}>
+                  📅 {remindAt ? remindAt.toLocaleDateString("pt-BR") : "Data"}
+                </Text>
+              </Pressable>
+              <Pressable style={styles.dateBtn} onPress={() => openOncePicker("time")}>
+                <Text style={styles.dateBtnText}>
+                  🕐{" "}
+                  {remindAt
+                    ? remindAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+                    : "Hora"}
+                </Text>
+              </Pressable>
+            </View>
+            {showPicker && (
+              <DateTimePicker
+                value={remindAt ?? defaultReminderDate()}
+                mode={pickerMode}
+                onChange={onOncePicker}
+                minimumDate={pickerMode === "date" ? new Date() : undefined}
+              />
+            )}
+          </View>
         )}
-        {showPicker && (
-          <DateTimePicker
-            value={remindAt ?? defaultReminderDate()}
-            mode={pickerMode}
-            onChange={onPickerChange}
-            minimumDate={pickerMode === "date" ? new Date() : undefined}
-          />
+
+        {/* Lembrete recorrente */}
+        {reminderMode === "recurring" && (
+          <View style={styles.recurringSection}>
+            {/* Tipo: todo dia vs dias da semana */}
+            <View style={styles.recTypeRow}>
+              <Pressable
+                onPress={() => setRecurringType("daily")}
+                style={[styles.recTypeChip, recurringType === "daily" && styles.recTypeChipActive]}
+              >
+                <Text style={[styles.recTypeText, recurringType === "daily" && styles.recTypeTextActive]}>
+                  Todo dia
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setRecurringType("weekly")}
+                style={[styles.recTypeChip, recurringType === "weekly" && styles.recTypeChipActive]}
+              >
+                <Text style={[styles.recTypeText, recurringType === "weekly" && styles.recTypeTextActive]}>
+                  Dias da semana
+                </Text>
+              </Pressable>
+            </View>
+
+            {/* Seleção de dias da semana */}
+            {recurringType === "weekly" && (
+              <View style={styles.daysRow}>
+                {WEEK_DAYS.map((d) => {
+                  const selected = recurringDays.includes(d.value);
+                  return (
+                    <Pressable
+                      key={d.value}
+                      onPress={() => toggleDay(d.value)}
+                      style={[styles.dayChip, selected && styles.dayChipActive]}
+                    >
+                      <Text style={[styles.dayChipText, selected && styles.dayChipTextActive]}>
+                        {d.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+
+            {/* Horário */}
+            <Pressable style={styles.timeBtn} onPress={() => setShowTimePicker(true)}>
+              <Text style={styles.timeBtnLabel}>Horário</Text>
+              <Text style={styles.timeBtnValue}>🕐 {recurringTimeLabel}</Text>
+            </Pressable>
+
+            {showTimePicker && (
+              <DateTimePicker
+                value={(() => {
+                  const d = new Date();
+                  d.setHours(recurringHour, recurringMinute, 0, 0);
+                  return d;
+                })()}
+                mode="time"
+                onChange={onTimePicker}
+              />
+            )}
+          </View>
         )}
       </View>
 
@@ -314,6 +463,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   multiline: { minHeight: 120 },
+
   reminderBox: {
     backgroundColor: colors.surface,
     borderRadius: 16,
@@ -322,6 +472,27 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+
+  // Seletor de modo
+  modeRow: { flexDirection: "row", gap: 8, marginBottom: 16 },
+  modeChip: {
+    flex: 1,
+    paddingVertical: 9,
+    borderRadius: 12,
+    backgroundColor: colors.surfaceAlt,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  modeChipActive: {
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primary,
+  },
+  modeChipText: { color: colors.textDim, fontSize: 12, fontWeight: "700" },
+  modeChipTextActive: { color: colors.text },
+
+  // Lembrete pontual
+  onceSection: {},
   dateRow: { flexDirection: "row", gap: 12 },
   dateBtn: {
     flex: 1,
@@ -331,8 +502,50 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   dateBtnText: { color: colors.text, fontWeight: "600" },
-  clearBtn: { marginTop: 12, alignSelf: "flex-start" },
-  clearBtnText: { color: colors.danger, fontWeight: "600" },
+
+  // Lembrete recorrente
+  recurringSection: { gap: 14 },
+  recTypeRow: { flexDirection: "row", gap: 10 },
+  recTypeChip: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: colors.surfaceAlt,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  recTypeChipActive: { backgroundColor: colors.primarySoft, borderColor: colors.primary },
+  recTypeText: { color: colors.textDim, fontWeight: "700", fontSize: 13 },
+  recTypeTextActive: { color: colors.text },
+
+  daysRow: { flexDirection: "row", gap: 6, flexWrap: "wrap" },
+  dayChip: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: colors.surfaceAlt,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  dayChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  dayChipText: { color: colors.textDim, fontSize: 11, fontWeight: "700" },
+  dayChipTextActive: { color: "#111111" },
+
+  timeBtn: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  timeBtnLabel: { color: colors.textDim, fontSize: 13, fontWeight: "700" },
+  timeBtnValue: { color: colors.text, fontWeight: "700", fontSize: 15 },
+
   saveBtn: {
     backgroundColor: colors.primary,
     borderRadius: 14,

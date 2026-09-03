@@ -27,3 +27,6 @@ yarn-error.*
 
 # claude
 .claude/
+
+logo
+organizapplogo/

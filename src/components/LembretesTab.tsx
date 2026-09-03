@@ -10,6 +10,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, useFocusEffect } from "expo-router";
 import {
@@ -350,35 +351,45 @@ export default function LembretesTab({ extraBottom = 0 }: Props) {
             {allSections
               .filter((s) => s.parent_id === null)
               .map((s) => (
-                <Pressable
+                <View
                   key={s.id}
                   style={[
                     styles.sectionPickerItem,
                     currentSection?.id === s.id &&
                       styles.sectionPickerItemActive,
                   ]}
-                  onPress={() => {
-                    setSectionPath([s]);
-                    setShowSectionPicker(false);
-                  }}
-                  onLongPress={() => {
-                    setShowSectionPicker(false);
-                    handleLongPressSection(s);
-                  }}
                 >
-                  <View
-                    style={[
-                      styles.sectionPickerDot,
-                      { backgroundColor: s.color },
-                    ]}
-                  />
-                  <Text style={styles.sectionPickerItemText}>
-                    {s.icon} {s.name}
-                  </Text>
-                  {currentSection?.id === s.id && (
-                    <Text style={styles.sectionPickerCheck}>✓</Text>
-                  )}
-                </Pressable>
+                  <Pressable
+                    style={styles.sectionPickerMain}
+                    onPress={() => {
+                      setSectionPath([s]);
+                      setShowSectionPicker(false);
+                    }}
+                  >
+                    <View
+                      style={[
+                        styles.sectionPickerDot,
+                        { backgroundColor: s.color },
+                      ]}
+                    />
+                    <Text style={styles.sectionPickerItemText}>
+                      {s.icon} {s.name}
+                    </Text>
+                    {currentSection?.id === s.id && (
+                      <Text style={styles.sectionPickerCheck}>✓</Text>
+                    )}
+                  </Pressable>
+                  <Pressable
+                    onPress={() => {
+                      setShowSectionPicker(false);
+                      handleLongPressSection(s);
+                    }}
+                    hitSlop={8}
+                    style={styles.sectionDeleteBtn}
+                  >
+                    <Ionicons name="trash-outline" size={18} color={colors.textDim} />
+                  </Pressable>
+                </View>
               ))}
           </Pressable>
         </Pressable>
@@ -502,15 +513,21 @@ const styles = StyleSheet.create({
   sectionPickerItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-    gap: 12,
   },
   sectionPickerItemActive: { opacity: 1 },
+  sectionPickerMain: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    gap: 12,
+  },
   sectionPickerDot: { width: 12, height: 12, borderRadius: 6 },
   sectionPickerItemText: { flex: 1, color: colors.text, fontSize: 15, fontWeight: "500" },
   sectionPickerCheck: { color: colors.primary, fontSize: 16, fontWeight: "700" },
+  sectionDeleteBtn: { paddingHorizontal: 8, paddingVertical: 14 },
 
   chipAdd: {
     paddingHorizontal: 14,

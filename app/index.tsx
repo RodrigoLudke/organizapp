@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, router } from "expo-router";
 import { colors } from "@/theme";
@@ -20,7 +20,13 @@ export default function Home() {
     <View style={styles.root}>
       <Stack.Screen
         options={{
-          title: "OrganizApp",
+          headerTitle: () => (
+            <Image
+              source={require("../assets/logo.png")}
+              style={styles.headerLogo}
+              resizeMode="contain"
+            />
+          ),
           headerRight: () => (
             <Pressable
               onPress={() => router.push("/settings")}
@@ -95,4 +101,5 @@ const styles = StyleSheet.create({
   tabLabelActive: { color: colors.text },
   gearBtn: { marginRight: 4 },
   gearIcon: { fontSize: 20 },
+  headerLogo: { height: 32, width: 140 },
 });

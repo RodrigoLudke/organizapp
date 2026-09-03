@@ -22,8 +22,9 @@ export type Item = {
   title: string;
   content: string;
   done: number; // 0 | 1 (SQLite não tem boolean)
-  remind_at: number | null; // timestamp em ms, ou null
-  notification_id: string | null;
+  remind_at: number | null; // timestamp em ms, ou null (para lembretes pontuais)
+  notification_id: string | null; // pode ser JSON array para recorrência
+  recurrence: string | null; // JSON: { type, hour, minute, days? }
   created_at: number;
   updated_at: number;
 };
@@ -34,6 +35,7 @@ export type NewItem = {
   content: string;
   remind_at?: number | null;
   notification_id?: string | null;
+  recurrence?: string | null;
 };
 
 // Uma única conexão reutilizada em todo o app.
@@ -200,6 +202,17 @@ export async function initDatabase(): Promise<void> {
       );
     `);
     await db.execAsync(`PRAGMA user_version = 4;`);
+    currentVersion = 4;
+  }
+
+  if (currentVersion < 5) {
+    // v4→v5: lembretes recorrentes
+    try {
+      await db.execAsync(`ALTER TABLE items ADD COLUMN recurrence TEXT`);
+    } catch (_) {
+      // Coluna já existe — ignora
+    }
+    await db.execAsync(`PRAGMA user_version = 5;`);
   }
 }
 
@@ -312,14 +325,15 @@ export async function createItem(item: NewItem): Promise<number> {
   const db = await getDb();
   const now = Date.now();
   const result = await db.runAsync(
-    `INSERT INTO items (section_id, title, content, remind_at, notification_id, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO items (section_id, title, content, remind_at, notification_id, recurrence, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       item.section_id,
       item.title,
       item.content,
       item.remind_at ?? null,
       item.notification_id ?? null,
+      item.recurrence ?? null,
       now,
       now,
     ]
@@ -336,7 +350,7 @@ export async function updateItem(
   if (!current) return;
   await db.runAsync(
     `UPDATE items
-     SET section_id = ?, title = ?, content = ?, remind_at = ?, notification_id = ?, updated_at = ?
+     SET section_id = ?, title = ?, content = ?, remind_at = ?, notification_id = ?, recurrence = ?, updated_at = ?
      WHERE id = ?`,
     [
       fields.section_id ?? current.section_id,
@@ -346,6 +360,7 @@ export async function updateItem(
       fields.notification_id !== undefined
         ? fields.notification_id
         : current.notification_id,
+      fields.recurrence !== undefined ? fields.recurrence : current.recurrence,
       Date.now(),
       id,
     ]
