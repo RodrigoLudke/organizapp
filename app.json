@@ -14,7 +14,7 @@
       "backgroundColor": "#1A1A2E"
     },
     "android": {
-      "package": "com.seunome.organizapp",
+      "package": "com.wizeorganizapp",
       "edgeToEdgeEnabled": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -23,7 +23,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.seunome.organizapp"
+      "bundleIdentifier": "com.wizeorganizapp",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "plugins": [
       "expo-router",
