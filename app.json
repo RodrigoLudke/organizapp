@@ -9,7 +9,7 @@
     "newArchEnabled": true,
     "icon": "./assets/icon.png",
     "splash": {
-      "image": "./assets/logo.png",
+      "image": "./assets/logo_marca_clara.png",
       "resizeMode": "contain",
       "backgroundColor": "#1A1A2E"
     },

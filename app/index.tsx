@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, router } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import { colors } from "@/theme";
 import LembretesTab from "@/components/LembretesTab";
 import FinanceiroTab from "@/components/FinanceiroTab";
@@ -20,9 +21,10 @@ export default function Home() {
     <View style={styles.root}>
       <Stack.Screen
         options={{
+          headerTitleAlign: "center",
           headerTitle: () => (
             <Image
-              source={require("../assets/logo.png")}
+              source={require("../assets/logo_marca_clara.png")}
               style={styles.headerLogo}
               resizeMode="contain"
             />
@@ -33,7 +35,7 @@ export default function Home() {
               style={styles.gearBtn}
               hitSlop={8}
             >
-              <Text style={styles.gearIcon}>⚙️</Text>
+              <Ionicons name="settings-outline" size={22} color={colors.textDim} />
             </Pressable>
           ),
         }}
@@ -100,6 +102,5 @@ const styles = StyleSheet.create({
   tabLabel: { fontSize: 11, color: colors.textDim, fontWeight: "600" },
   tabLabelActive: { color: colors.text },
   gearBtn: { marginRight: 4 },
-  gearIcon: { fontSize: 20 },
-  headerLogo: { height: 32, width: 140 },
+  headerLogo: { height: 40, width: 180, backgroundColor: "transparent" },
 });
