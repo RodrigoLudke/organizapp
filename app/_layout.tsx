@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
-import { View, ActivityIndicator } from "react-native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import * as SplashScreen from "expo-splash-screen";
 import { initDatabase } from "@/db/database";
 import { setupNotifications } from "@/lib/notifications";
 import { colors } from "@/theme";
+
+SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const [ready, setReady] = useState(false);
@@ -15,23 +17,11 @@ export default function RootLayout() {
       await initDatabase();
       await setupNotifications();
       setReady(true);
+      await SplashScreen.hideAsync();
     })();
   }, []);
 
-  if (!ready) {
-    return (
-      <View
-        style={{
-          flex: 1,
-          backgroundColor: colors.bg,
-          justifyContent: "center",
-          alignItems: "center",
-        }}
-      >
-        <ActivityIndicator color={colors.primary} size="large" />
-      </View>
-    );
-  }
+  if (!ready) return null;
 
   return (
     <SafeAreaProvider>

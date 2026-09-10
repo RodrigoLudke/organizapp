@@ -224,6 +224,10 @@ export default function EditScreen() {
 
   const recurringTimeLabel = `${String(recurringHour).padStart(2, "0")}:${String(recurringMinute).padStart(2, "0")}`;
 
+  const sectionColor =
+    sections.find((s) => s.id === sectionId)?.color ?? colors.primary;
+  const sectionContrastColor = getContrastColor(sectionColor);
+
   return (
     <ScrollView
       style={styles.container}
@@ -300,17 +304,28 @@ export default function EditScreen() {
 
         {/* Seletor de modo */}
         <View style={styles.modeRow}>
-          {(["none", "once", "recurring"] as ReminderMode[]).map((m) => (
-            <Pressable
-              key={m}
-              onPress={() => setReminderMode(m)}
-              style={[styles.modeChip, reminderMode === m && styles.modeChipActive]}
-            >
-              <Text style={[styles.modeChipText, reminderMode === m && styles.modeChipTextActive]}>
-                {m === "none" ? "Sem lembrete" : m === "once" ? "Uma vez" : "Repetir"}
-              </Text>
-            </Pressable>
-          ))}
+          {(["none", "once", "recurring"] as ReminderMode[]).map((m) => {
+            const active = reminderMode === m;
+            return (
+              <Pressable
+                key={m}
+                onPress={() => setReminderMode(m)}
+                style={[
+                  styles.modeChip,
+                  active && { backgroundColor: sectionColor, borderColor: sectionColor },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.modeChipText,
+                    active && { color: sectionContrastColor },
+                  ]}
+                >
+                  {m === "none" ? "Sem lembrete" : m === "once" ? "Uma vez" : "Repetir"}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
 
         {/* Lembrete pontual */}
@@ -407,8 +422,11 @@ export default function EditScreen() {
       </View>
 
       {/* Salvar */}
-      <Pressable style={styles.saveBtn} onPress={handleSave}>
-        <Text style={styles.saveBtnText}>Salvar</Text>
+      <Pressable
+        style={[styles.saveBtn, { backgroundColor: sectionColor }]}
+        onPress={handleSave}
+      >
+        <Text style={[styles.saveBtnText, { color: sectionContrastColor }]}>Salvar</Text>
       </Pressable>
 
       {editing && (
