@@ -15,8 +15,10 @@ import {
   listTransactions,
   type Transaction,
   getSetting,
+  setSetting,
 } from "@/db/database";
 import { fetchAllTransactions, hasPluggyCredentials } from "@/lib/pluggy";
+import { seedDemoData } from "@/lib/demoData";
 import { router } from "expo-router";
 import { colors } from "@/theme";
 
@@ -128,6 +130,13 @@ export default function FinanceiroTab({ extraBottom = 0 }: Props) {
 
   // Auto-sync: roda ao montar e verifica se há credenciais configuradas
   const autoSync = useCallback(async () => {
+    const demo = await getSetting("demo_mode");
+    if (demo === "1") {
+      setHasCredentials(true);
+      await seedDemoData();
+      await loadTransactions();
+      return;
+    }
     const creds = await hasPluggyCredentials();
     const itemId = await getSetting("pluggy_item_id");
     setHasCredentials(!!(creds && itemId));
@@ -335,6 +344,18 @@ export default function FinanceiroTab({ extraBottom = 0 }: Props) {
             onPress={() => router.push("/settings")}
           >
             <Text style={styles.tutorialBtnText}>Ir para Configurações</Text>
+          </Pressable>
+
+          <Pressable
+            style={[styles.tutorialBtn, { backgroundColor: colors.surface, marginTop: 10 }]}
+            onPress={async () => {
+              await setSetting("demo_mode", "1");
+              setHasCredentials(true);
+              await seedDemoData();
+              await loadTransactions();
+            }}
+          >
+            <Text style={styles.tutorialBtnText}>Ver demonstração (dados de exemplo)</Text>
           </Pressable>
         </ScrollView>
       ) : (

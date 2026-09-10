@@ -94,6 +94,7 @@ export default function SettingsScreen() {
             await setSetting("pluggy_client_id", "");
             await setSetting("pluggy_client_secret", "");
             await setSetting("pluggy_item_id", "");
+            await setSetting("demo_mode", "");
             setClientId("");
             setClientSecret("");
             setItemId("");
