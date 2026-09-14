@@ -366,10 +366,11 @@ export default function EditScreen() {
                 onPress={() => setRecurringType("daily")}
                 style={[
                   styles.recTypeChip,
-                  recurringType === "daily" && { backgroundColor: sectionColor, borderColor: sectionColor },
+                  { borderColor: sectionColor },
+                  recurringType === "daily" && { backgroundColor: sectionColor },
                 ]}
               >
-                <Text style={[styles.recTypeText, recurringType === "daily" && { color: sectionContrastColor }]}>
+                <Text style={[styles.recTypeText, { color: recurringType === "daily" ? sectionContrastColor : sectionColor }]}>
                   Todo dia
                 </Text>
               </Pressable>
@@ -377,10 +378,11 @@ export default function EditScreen() {
                 onPress={() => setRecurringType("weekly")}
                 style={[
                   styles.recTypeChip,
-                  recurringType === "weekly" && { backgroundColor: sectionColor, borderColor: sectionColor },
+                  { borderColor: sectionColor },
+                  recurringType === "weekly" && { backgroundColor: sectionColor },
                 ]}
               >
-                <Text style={[styles.recTypeText, recurringType === "weekly" && { color: sectionContrastColor }]}>
+                <Text style={[styles.recTypeText, { color: recurringType === "weekly" ? sectionContrastColor : sectionColor }]}>
                   Dias da semana
                 </Text>
               </Pressable>
