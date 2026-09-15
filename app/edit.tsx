@@ -366,11 +366,10 @@ export default function EditScreen() {
                 onPress={() => setRecurringType("daily")}
                 style={[
                   styles.recTypeChip,
-                  { borderColor: sectionColor },
-                  recurringType === "daily" && { backgroundColor: sectionColor },
+                  recurringType === "daily" && { backgroundColor: sectionColor, borderColor: sectionColor },
                 ]}
               >
-                <Text style={[styles.recTypeText, { color: recurringType === "daily" ? sectionContrastColor : sectionColor }]}>
+                <Text style={[styles.recTypeText, recurringType === "daily" && { color: sectionContrastColor }]}>
                   Todo dia
                 </Text>
               </Pressable>
@@ -378,11 +377,10 @@ export default function EditScreen() {
                 onPress={() => setRecurringType("weekly")}
                 style={[
                   styles.recTypeChip,
-                  { borderColor: sectionColor },
-                  recurringType === "weekly" && { backgroundColor: sectionColor },
+                  recurringType === "weekly" && { backgroundColor: sectionColor, borderColor: sectionColor },
                 ]}
               >
-                <Text style={[styles.recTypeText, { color: recurringType === "weekly" ? sectionContrastColor : sectionColor }]}>
+                <Text style={[styles.recTypeText, recurringType === "weekly" && { color: sectionContrastColor }]}>
                   Dias da semana
                 </Text>
               </Pressable>
@@ -397,9 +395,9 @@ export default function EditScreen() {
                     <Pressable
                       key={d.value}
                       onPress={() => toggleDay(d.value)}
-                      style={[styles.dayChip, selected && styles.dayChipActive]}
+                      style={[styles.dayChip, selected && { backgroundColor: sectionColor, borderColor: sectionColor }]}
                     >
-                      <Text style={[styles.dayChipText, selected && styles.dayChipTextActive]}>
+                      <Text style={[styles.dayChipText, selected && { color: sectionContrastColor }]}>
                         {d.label}
                       </Text>
                     </Pressable>
