@@ -458,6 +458,11 @@ export async function listTransactions(from: string, to: string): Promise<Transa
   );
 }
 
+export async function clearDemoTransactions(): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(`DELETE FROM transactions WHERE pluggy_id LIKE 'demo-%'`);
+}
+
 // ─── Settings ─────────────────────────────────────────────────────────────────
 
 export async function getSetting(key: string): Promise<string | null> {

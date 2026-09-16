@@ -18,7 +18,7 @@ import {
   setSetting,
 } from "@/db/database";
 import { fetchAllTransactions, hasPluggyCredentials } from "@/lib/pluggy";
-import { seedDemoData } from "@/lib/demoData";
+import { removeDemoData, seedDemoData } from "@/lib/demoData";
 import { router } from "expo-router";
 import { colors } from "@/theme";
 
@@ -70,6 +70,7 @@ export default function FinanceiroTab({ extraBottom = 0 }: Props) {
   });
 
   const [hasCredentials, setHasCredentials] = useState<boolean | null>(null);
+  const [isDemoMode, setIsDemoMode] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState<number | null>(null);
@@ -132,6 +133,7 @@ export default function FinanceiroTab({ extraBottom = 0 }: Props) {
   const autoSync = useCallback(async () => {
     const demo = await getSetting("demo_mode");
     if (demo === "1") {
+      setIsDemoMode(true);
       setHasCredentials(true);
       await seedDemoData();
       await loadTransactions();
@@ -350,35 +352,52 @@ export default function FinanceiroTab({ extraBottom = 0 }: Props) {
             style={[styles.tutorialBtn, { backgroundColor: colors.surface, marginTop: 10 }]}
             onPress={async () => {
               await setSetting("demo_mode", "1");
+              setIsDemoMode(true);
               setHasCredentials(true);
               await seedDemoData();
               await loadTransactions();
             }}
           >
-            <Text style={styles.tutorialBtnText}>Ver demonstração (dados de exemplo)</Text>
+            <Text style={[styles.tutorialBtnText, { color: colors.text }]}>Ver demonstração (dados de exemplo)</Text>
           </Pressable>
         </ScrollView>
       ) : (
-        <FlatList
-          data={grouped}
-          keyExtractor={([date]) => date}
-          renderItem={({ item }) => renderDateGroup(item)}
-          contentContainerStyle={{
-            padding: 16,
-            paddingBottom: 24 + extraBottom,
-          }}
-          ListEmptyComponent={
-            syncing ? null : (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyIcon}>🗓️</Text>
-                <Text style={styles.emptyTitle}>Sem transações</Text>
-                <Text style={styles.emptySubtitle}>
-                  Nenhuma transação encontrada neste mês.
-                </Text>
-              </View>
-            )
-          }
-        />
+        <>
+          {isDemoMode && (
+            <Pressable
+              style={styles.demoBanner}
+              onPress={async () => {
+                await setSetting("demo_mode", "0");
+                await removeDemoData();
+                setIsDemoMode(false);
+                setHasCredentials(false);
+                setTransactions([]);
+              }}
+            >
+              <Text style={styles.demoBannerText}>Modo demonstração  •  Toque para sair</Text>
+            </Pressable>
+          )}
+          <FlatList
+            data={grouped}
+            keyExtractor={([date]) => date}
+            renderItem={({ item }) => renderDateGroup(item)}
+            contentContainerStyle={{
+              padding: 16,
+              paddingBottom: 24 + extraBottom,
+            }}
+            ListEmptyComponent={
+              syncing ? null : (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyIcon}>🗓️</Text>
+                  <Text style={styles.emptyTitle}>Sem transações</Text>
+                  <Text style={styles.emptySubtitle}>
+                    Nenhuma transação encontrada neste mês.
+                  </Text>
+                </View>
+              )
+            }
+          />
+        </>
       )}
 
       {/* Indicador de sync */}
@@ -559,4 +578,11 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   tutorialBtnText: { color: "#111111", fontWeight: "800", fontSize: 15 },
+  demoBanner: {
+    backgroundColor: colors.warning,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    alignItems: "center",
+  },
+  demoBannerText: { color: "#FFFFFF", fontWeight: "700", fontSize: 13 },
 });

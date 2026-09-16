@@ -1,4 +1,4 @@
-import { upsertTransactions } from "../db/database";
+import { clearDemoTransactions, upsertTransactions } from "../db/database";
 
 const iso = (d: Date) => {
   const y = d.getFullYear();
@@ -45,4 +45,9 @@ function monthTransactions(offset: number) {
 // Popula o mês atual e o anterior
 export async function seedDemoData() {
   await upsertTransactions([...monthTransactions(0), ...monthTransactions(1)]);
+}
+
+// Remove todos os dados de demonstração
+export async function removeDemoData() {
+  await clearDemoTransactions();
 }
