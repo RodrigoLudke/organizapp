@@ -329,24 +329,28 @@ export default function LembretesTab({ extraBottom = 0 }: Props) {
           >
             <Text style={styles.modalTitle}>Seções</Text>
 
-            <Pressable
+            <View
               style={[
                 styles.sectionPickerItem,
                 isAtRoot && styles.sectionPickerItemActive,
               ]}
-              onPress={() => {
-                setSectionPath([]);
-                setShowSectionPicker(false);
-              }}
             >
-              <View
-                style={[styles.sectionPickerDot, { backgroundColor: colors.primary }]}
-              />
-              <Text style={styles.sectionPickerItemText}>Todas</Text>
-              {isAtRoot && (
-                <Text style={styles.sectionPickerCheck}>✓</Text>
-              )}
-            </Pressable>
+              <Pressable
+                style={styles.sectionPickerMain}
+                onPress={() => {
+                  setSectionPath([]);
+                  setShowSectionPicker(false);
+                }}
+              >
+                <View
+                  style={[styles.sectionPickerDot, { backgroundColor: colors.primary }]}
+                />
+                <Text style={styles.sectionPickerItemText}>Todas</Text>
+                {isAtRoot && (
+                  <Text style={styles.sectionPickerCheck}>✓</Text>
+                )}
+              </Pressable>
+            </View>
 
             {allSections
               .filter((s) => s.parent_id === null)
