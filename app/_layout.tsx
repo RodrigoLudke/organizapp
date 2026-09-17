@@ -29,8 +29,13 @@ export default function RootLayout() {
 
   useEffect(() => {
     (async () => {
-      await initDatabase();
-      await setupNotifications();
+      // DB and notifications must not prevent app from opening if they fail
+      try {
+        await initDatabase();
+        await setupNotifications();
+      } catch {
+        // Proceed even if DB/notifications fail
+      }
 
       try {
         // ATT — iOS only; no-op on Android
@@ -39,24 +44,30 @@ export default function RootLayout() {
           await requestTrackingPermissionsAsync();
         }
 
-        await mobileAds().initialize();
-
-        // UMP consent (LGPD — never blocks boot on failure)
+        // UMP consent (LGPD) — must run before initialize()
+        let nonPersonalizedOnly = true; // safe default
         try {
           const consentInfo = await AdsConsent.requestInfoUpdate();
           if (
             consentInfo.isConsentFormAvailable &&
             consentInfo.status === AdsConsentStatus.REQUIRED
           ) {
-            await AdsConsent.showForm();
+            const updated = await AdsConsent.showForm();
+            nonPersonalizedOnly = updated.status !== AdsConsentStatus.OBTAINED;
+          } else {
+            nonPersonalizedOnly =
+              consentInfo.status !== AdsConsentStatus.OBTAINED &&
+              consentInfo.status !== AdsConsentStatus.NOT_REQUIRED;
           }
         } catch {
           // Consent unavailable — proceed with non-personalized ads
         }
 
+        await mobileAds().initialize();
+
         await incrementAppOpenCount();
         if (await shouldShowAppOpenAd()) {
-          await showAppOpenAd();
+          await showAppOpenAd(nonPersonalizedOnly);
           await recordAdShown();
         }
       } catch {

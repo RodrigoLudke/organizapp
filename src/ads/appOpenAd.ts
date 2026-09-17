@@ -55,8 +55,15 @@ export async function recordAdShown(): Promise<void> {
  * Loads and shows an App Open Ad.
  * Always resolves (never rejects) — any failure is swallowed so the boot flow
  * is never blocked. Respects timeoutMs as a hard upper bound.
+ *
+ * @param requestNonPersonalizedAdsOnly Pass false only when the user has
+ *   explicitly granted consent (AdsConsentStatus.OBTAINED). Defaults to true
+ *   (safe default for unknown / no-consent scenarios).
  */
-export function showAppOpenAd(timeoutMs = 5000): Promise<void> {
+export function showAppOpenAd(
+  requestNonPersonalizedAdsOnly = true,
+  timeoutMs = 5000,
+): Promise<void> {
   return new Promise<void>((resolve) => {
     let finished = false;
     const finish = () => {
@@ -70,7 +77,7 @@ export function showAppOpenAd(timeoutMs = 5000): Promise<void> {
     let ad: AppOpenAd | null = null;
     try {
       ad = AppOpenAd.createForAdRequest(adUnitId, {
-        requestNonPersonalizedAdsOnly: true,
+        requestNonPersonalizedAdsOnly,
       });
 
       ad.addAdEventListener(AdEventType.LOADED, () => {
