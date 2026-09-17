@@ -24,14 +24,6 @@
       }
     },
     "plugins": [
-      [
-        "expo-build-properties",
-        {
-          "android": {
-            "kotlinVersion": "2.3.0"
-          }
-        }
-      ],
       "expo-router",
       [
         "expo-splash-screen",
