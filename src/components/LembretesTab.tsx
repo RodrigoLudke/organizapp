@@ -548,6 +548,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 16,
     paddingTop: 10,
+    paddingBottom: 10,
   },
   doneChip: {
     paddingHorizontal: 12,
