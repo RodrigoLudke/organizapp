@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -26,56 +26,76 @@ SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const [ready, setReady] = useState(false);
+  const bootRan = useRef(false);
 
   useEffect(() => {
+    if (bootRan.current) return;
+    bootRan.current = true;
     (async () => {
-      // DB and notifications must not prevent app from opening if they fail
       try {
+        console.log("[boot] iniciando DB e notificações");
         await initDatabase();
+        console.log("[boot] DB ok");
         await setupNotifications();
-      } catch {
-        // Proceed even if DB/notifications fail
+        console.log("[boot] notificações ok");
+      } catch (e) {
+        console.log("[boot] DB/notificações erro:", e);
       }
 
+      // Renderiza o app e esconde a splash assim que o essencial está pronto.
+      // Formulário de consentimento e anúncio aparecem como overlays por cima.
+      setReady(true);
+      await SplashScreen.hideAsync();
+
       try {
-        // ATT — iOS only; no-op on Android
+        console.log("[boot] tracking permission");
         const { status } = await getTrackingPermissionsAsync();
         if (status === PermissionStatus.UNDETERMINED) {
           await requestTrackingPermissionsAsync();
         }
+        console.log("[boot] tracking ok:", status);
 
-        // UMP consent (LGPD) — must run before initialize()
-        let nonPersonalizedOnly = true; // safe default
+        let nonPersonalizedOnly = true;
         try {
+          if (__DEV__) await AdsConsent.reset();
+          console.log("[boot] requestInfoUpdate...");
           const consentInfo = await AdsConsent.requestInfoUpdate();
+          console.log("[boot] consentInfo:", consentInfo.status, "formAvailable:", consentInfo.isConsentFormAvailable);
           if (
             consentInfo.isConsentFormAvailable &&
             consentInfo.status === AdsConsentStatus.REQUIRED
           ) {
+            console.log("[boot] mostrando formulário de consentimento");
             const updated = await AdsConsent.showForm();
+            console.log("[boot] formulário respondido:", updated.status);
             nonPersonalizedOnly = updated.status !== AdsConsentStatus.OBTAINED;
           } else {
             nonPersonalizedOnly =
               consentInfo.status !== AdsConsentStatus.OBTAINED &&
               consentInfo.status !== AdsConsentStatus.NOT_REQUIRED;
           }
-        } catch {
-          // Consent unavailable — proceed with non-personalized ads
+        } catch (e) {
+          console.log("[boot] consent erro:", e);
         }
 
+        console.log("[boot] mobileAds initialize...");
         await mobileAds().initialize();
+        console.log("[boot] mobileAds ok");
 
         await incrementAppOpenCount();
-        if (await shouldShowAppOpenAd()) {
+        const show = await shouldShowAppOpenAd();
+        console.log("[boot] shouldShowAppOpenAd:", show);
+        if (show) {
+          console.log("[boot] mostrando app open ad...");
           await showAppOpenAd(nonPersonalizedOnly);
           await recordAdShown();
+          console.log("[boot] ad fechado");
         }
-      } catch {
-        // Ads SDK failure must never prevent the app from opening
+      } catch (e) {
+        console.log("[boot] ads erro:", e);
       }
 
-      setReady(true);
-      await SplashScreen.hideAsync();
+      console.log("[boot] pronto");
     })();
   }, []);
 
